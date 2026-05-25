@@ -35,6 +35,7 @@ import associationsRoutes from './routes/associations.js';
 import accountabilityRoutes from './routes/accountability.js';
 import aiRoutes from './routes/ai.js';
 import assistantRoutes from './routes/assistant.js';
+import fleetGraphRoutes from './routes/fleetgraph.js';
 import weeklyPlansRoutes, { weeklyRetrosRouter } from './routes/weekly-plans.js';
 import { documentCommentsRouter, commentsRouter } from './routes/comments.js';
 import { setupSwagger } from './swagger.js';
@@ -236,6 +237,9 @@ export function createApp(corsOrigin: string = 'http://localhost:5173'): express
 
   // Ask Ship assistant routes - workspace-scoped AI surface (CSRF protected)
   app.use('/api/assistant', assistantLimiter, conditionalCsrf, assistantRoutes);
+
+  // FleetGraph routes - proactive project intelligence and approvals (CSRF protected)
+  app.use('/api/fleetgraph', assistantLimiter, conditionalCsrf, fleetGraphRoutes);
 
   // Weekly plans routes - per-person accountability documents (CSRF protected)
   app.use('/api/weekly-plans', conditionalCsrf, weeklyPlansRoutes);

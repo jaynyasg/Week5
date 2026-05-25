@@ -150,6 +150,7 @@ export interface FleetGraphFindingSummary {
 export interface FleetGraphFindingDetail extends FleetGraphFindingSummary {
   rationale: string;
   evidence: FleetGraphEvidence[];
+  proposals: FleetGraphActionProposal[];
   runId: string | null;
   firstDetectedAt: string;
   lastObservedAt: string;

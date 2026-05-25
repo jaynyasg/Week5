@@ -155,6 +155,8 @@ export interface FleetGraphState {
 export interface FleetGraphRunResult {
   status: 'completed' | 'interrupted' | 'failed';
   state: FleetGraphState;
+  runId?: string | null;
+  threadId?: string;
   error?: string;
 }
 

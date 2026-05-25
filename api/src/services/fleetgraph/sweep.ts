@@ -2,7 +2,7 @@ import { randomUUID } from 'crypto';
 import { pool } from '../../db/client.js';
 import { resolveFleetGraphAudience } from './audience.js';
 import { createFleetGraphDeliveries } from './deliveries.js';
-import { persistFleetGraphFinding } from './findings.js';
+import { persistFleetGraphActionProposal, persistFleetGraphFinding } from './findings.js';
 import { runFleetGraph } from './runner.js';
 import {
   claimNextFleetGraphEvent,
@@ -119,7 +119,16 @@ async function persistAndDeliverFinding(
   const findingDocumentId = await persistFleetGraphFinding({
     context: result.state.context,
     candidate: finding,
+    runId: result.runId,
   });
+  if (finding.actionProposal) {
+    await persistFleetGraphActionProposal({
+      context: result.state.context,
+      proposal: finding.actionProposal,
+      findingDocumentId,
+      runId: result.runId,
+    });
+  }
   const audience = resolveFleetGraphAudience(finding, result.state.context);
   await createFleetGraphDeliveries({
     workspaceId: result.state.context.workspaceId,

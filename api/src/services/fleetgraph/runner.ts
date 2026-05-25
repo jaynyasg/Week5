@@ -65,7 +65,11 @@ export async function runFleetGraph(input: {
     error: result.error ?? null,
   });
 
-  return result;
+  return {
+    ...result,
+    runId: run.id,
+    threadId,
+  };
 }
 
 export async function safeRunFleetGraph(input: Parameters<typeof runFleetGraph>[0]): Promise<FleetGraphRunResult> {

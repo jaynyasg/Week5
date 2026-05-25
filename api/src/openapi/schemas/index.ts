@@ -29,6 +29,7 @@ export * from './weekly-plans.js';
 export * from './comments.js';
 export * from './ai.js';
 export * from './assistant.js';
+export * from './fleetgraph.js';
 export * from './timeline.js';
 export * from './admin.js';
 

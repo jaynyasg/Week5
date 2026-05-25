@@ -1,5 +1,6 @@
 import { pool } from '../../db/client.js';
 import type {
+  FleetGraphActionProposalCandidate,
   FleetGraphContext,
   FleetGraphFindingCandidate,
 } from './types.js';
@@ -57,6 +58,31 @@ export async function persistFleetGraphFindings(input: {
     }));
   }
   return ids;
+}
+
+export async function persistFleetGraphActionProposal(input: {
+  context: FleetGraphContext;
+  proposal: FleetGraphActionProposalCandidate;
+  findingDocumentId: string;
+  runId?: string | null;
+}): Promise<string> {
+  const result = await pool.query<{ id: string }>(
+    `INSERT INTO fleetgraph_action_proposals (
+       workspace_id, finding_document_id, run_id, proposed_action, target_document_id, payload
+     )
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id`,
+    [
+      input.context.workspaceId,
+      input.findingDocumentId,
+      input.runId ?? null,
+      input.proposal.proposedAction,
+      input.proposal.targetDocumentId,
+      JSON.stringify(input.proposal.payload),
+    ],
+  );
+
+  return result.rows[0]!.id;
 }
 
 async function persistFindingAssociations(
