@@ -531,6 +531,7 @@ Current deterministic evidence:
 
 - `e2e/fixtures/isolated-env.ts` seeds a completed proactive FleetGraph run, a delivered unread finding, and a pending human action proposal.
 - `e2e/fleetgraph.spec.ts` opens FleetGraph from a Ship document, marks the delivered finding read, rejects the action proposal with a note, and verifies contextual chat response grounding.
+- `e2e/fleetgraph.spec.ts` also creates a real sprint document event, drains the FleetGraph queue against the isolated test database, and verifies a delivered planning-gap finding appears in the drawer within the 5 minute latency target.
 - `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus the no-finding branch: week planning gap, project churn/stalled issues, stale engineer issue, approved-plan-change HITL, missing ownership, context chat, and no-finding.
 
 Blocked until local PostgreSQL is running:
@@ -540,7 +541,7 @@ Blocked until local PostgreSQL is running:
 
 Pending final submission evidence:
 
-- timed event-to-finding run under 5 minutes
+- deployed or model-backed timed event-to-finding run under 5 minutes
 - at least two reviewed LangSmith trace links
 - cost table from real `fleetgraph_runs` data
 - deployed URL validation

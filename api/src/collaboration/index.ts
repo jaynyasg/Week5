@@ -36,7 +36,7 @@ const rateLimitViolations = new Map<WebSocket, number>();
 const RATE_LIMIT_VIOLATION_THRESHOLD = 50; // Close connection after 50 violations
 
 // Clean up old connection attempts periodically
-setInterval(() => {
+const connectionCleanupInterval = setInterval(() => {
   const now = Date.now();
   connectionAttempts.forEach((timestamps, ip) => {
     const valid = timestamps.filter(t => now - t < RATE_LIMIT.CONNECTION_WINDOW_MS);
@@ -47,6 +47,7 @@ setInterval(() => {
     }
   });
 }, 30_000);
+connectionCleanupInterval.unref?.();
 
 // Check if IP is rate limited for new connections
 function isConnectionRateLimited(ip: string): boolean {

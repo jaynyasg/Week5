@@ -194,7 +194,7 @@ pnpm build
 
 | Evidence | Source | Status |
 |---|---|---|
-| Proactive detection | E2E/timed run | Deterministic E2E seed passed; timed real event run pending |
+| Proactive detection | E2E/timed run | Timed local E2E event-to-finding passed; deployed/model-backed run pending |
 | On-demand chat | UI/E2E run | Deterministic E2E passed |
 | HITL gate | API + UI test | Deterministic E2E reject flow passed; DB-backed API authorization coverage pending |
 | Trace link 1 | LangSmith | TBD |
@@ -221,6 +221,7 @@ New deterministic coverage:
 
 - `e2e/fixtures/isolated-env.ts` owns FleetGraph setup data for a completed proactive run, delivered finding, unread delivery, and pending action proposal.
 - `e2e/fleetgraph.spec.ts` now exercises the FleetGraph drawer, delivered finding detail, delivery read-state transition, action proposal rejection, and context-aware chat response.
+- `e2e/fleetgraph.spec.ts` creates a real sprint document event, drains FleetGraph against the isolated test database, and asserts delivery plus drawer visibility under the 5 minute latency target.
 - `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus the no-finding branch with a focused no-database Vitest config.
 
 Blocked locally:
