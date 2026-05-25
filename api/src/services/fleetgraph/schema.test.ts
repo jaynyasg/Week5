@@ -134,6 +134,25 @@ describe('FleetGraph schema foundation', () => {
     )).rejects.toMatchObject({ code: '23505' });
   });
 
+  it('prevents duplicate active finding documents for the same FleetGraph key', async () => {
+    const properties = {
+      ...findingProperties(),
+      fleetgraph_key: 'schema-duplicate-risk',
+    };
+
+    await pool.query(
+      `INSERT INTO documents (workspace_id, document_type, title, properties, created_by)
+       VALUES ($1, 'fleetgraph_finding', 'Duplicate FleetGraph Risk', $2, $3)`,
+      [workspaceId, JSON.stringify(properties), userId],
+    );
+
+    await expect(pool.query(
+      `INSERT INTO documents (workspace_id, document_type, title, properties, created_by)
+       VALUES ($1, 'fleetgraph_finding', 'Duplicate FleetGraph Risk', $2, $3)`,
+      [workspaceId, JSON.stringify(properties), userId],
+    )).rejects.toMatchObject({ code: '23505' });
+  });
+
   it('preserves rejected and failed action proposals for review', async () => {
     await pool.query(
       `INSERT INTO fleetgraph_action_proposals (

@@ -33,6 +33,12 @@ CREATE INDEX IF NOT EXISTS idx_fleetgraph_event_queue_source_document
   ON fleetgraph_event_queue(source_document_id)
   WHERE source_document_id IS NOT NULL;
 
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fleetgraph_findings_workspace_key
+  ON documents (workspace_id, ((properties->>'fleetgraph_key')))
+  WHERE document_type = 'fleetgraph_finding'
+    AND properties ? 'fleetgraph_key'
+    AND deleted_at IS NULL;
+
 CREATE TABLE IF NOT EXISTS fleetgraph_runs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,

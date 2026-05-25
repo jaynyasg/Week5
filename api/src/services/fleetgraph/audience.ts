@@ -32,11 +32,15 @@ export function resolveFleetGraphAudience(
   }
 
   return {
-    userIds: [context.userId],
+    userIds: isUuid(context.userId) ? [context.userId] : [],
     reason: 'requester',
   };
 }
 
 function readString(value: unknown): string | null {
   return typeof value === 'string' && value.trim() ? value : null;
+}
+
+function isUuid(value: string): boolean {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }

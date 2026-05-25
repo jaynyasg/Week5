@@ -30,18 +30,39 @@ export async function persistFleetGraphFinding(input: {
   const result = await pool.query<{ id: string }>(
     `INSERT INTO documents (workspace_id, document_type, title, properties, created_by, visibility)
      VALUES ($1, 'fleetgraph_finding', $2, $3, $4, 'workspace')
+     ON CONFLICT (workspace_id, ((properties->>'fleetgraph_key')))
+       WHERE document_type = 'fleetgraph_finding'
+         AND properties ? 'fleetgraph_key'
+         AND deleted_at IS NULL
+     DO UPDATE SET
+       title = EXCLUDED.title,
+       properties = documents.properties
+         || jsonb_build_object(
+           'summary', EXCLUDED.properties->>'summary',
+           'rationale', EXCLUDED.properties->>'rationale',
+           'run_id', EXCLUDED.properties->'run_id',
+           'evidence', EXCLUDED.properties->'evidence',
+           'last_observed_at', EXCLUDED.properties->>'last_observed_at'
+         ),
+       updated_at = now()
      RETURNING id`,
     [
       input.context.workspaceId,
       input.candidate.title,
       JSON.stringify(properties),
-      input.context.userId,
+      toNullableUuid(input.context.userId),
     ],
   );
 
   const findingDocumentId = result.rows[0]!.id;
   await persistFindingAssociations(input.context, findingDocumentId);
   return findingDocumentId;
+}
+
+function toNullableUuid(value: string): string | null {
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
+    ? value
+    : null;
 }
 
 export async function persistFleetGraphFindings(input: {
@@ -66,6 +87,27 @@ export async function persistFleetGraphActionProposal(input: {
   findingDocumentId: string;
   runId?: string | null;
 }): Promise<string> {
+  const payload = JSON.stringify(input.proposal.payload);
+  const existing = await pool.query<{ id: string }>(
+    `SELECT id
+     FROM fleetgraph_action_proposals
+     WHERE workspace_id = $1
+       AND finding_document_id = $2
+       AND proposed_action = $3
+       AND target_document_id IS NOT DISTINCT FROM $4::uuid
+       AND payload = $5::jsonb
+       AND status = 'pending'
+     LIMIT 1`,
+    [
+      input.context.workspaceId,
+      input.findingDocumentId,
+      input.proposal.proposedAction,
+      input.proposal.targetDocumentId,
+      payload,
+    ],
+  );
+  if (existing.rows[0]) return existing.rows[0].id;
+
   const result = await pool.query<{ id: string }>(
     `INSERT INTO fleetgraph_action_proposals (
        workspace_id, finding_document_id, run_id, proposed_action, target_document_id, payload
@@ -78,7 +120,7 @@ export async function persistFleetGraphActionProposal(input: {
       input.runId ?? null,
       input.proposal.proposedAction,
       input.proposal.targetDocumentId,
-      JSON.stringify(input.proposal.payload),
+      payload,
     ],
   );
 

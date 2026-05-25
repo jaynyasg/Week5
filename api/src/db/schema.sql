@@ -561,6 +561,10 @@ CREATE INDEX IF NOT EXISTS idx_fleetgraph_event_queue_ready ON fleetgraph_event_
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_event_queue_workspace_created ON fleetgraph_event_queue(workspace_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_event_queue_source_document ON fleetgraph_event_queue(source_document_id)
   WHERE source_document_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_fleetgraph_findings_workspace_key ON documents (workspace_id, ((properties->>'fleetgraph_key')))
+  WHERE document_type = 'fleetgraph_finding'
+    AND properties ? 'fleetgraph_key'
+    AND deleted_at IS NULL;
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_runs_workspace_created ON fleetgraph_runs(workspace_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_runs_thread ON fleetgraph_runs(thread_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_runs_status ON fleetgraph_runs(workspace_id, status, created_at DESC);

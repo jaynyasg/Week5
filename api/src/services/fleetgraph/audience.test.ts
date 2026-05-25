@@ -28,6 +28,16 @@ describe('FleetGraph audience resolution', () => {
       reason: 'admin_fallback',
     });
   });
+
+  it('does not route system-triggered findings to a fake user id', () => {
+    expect(resolveFleetGraphAudience(findingCandidate({ ownerUserId: null }), context({
+      userId: 'system',
+      workspaceAdminUserIds: [],
+    }))).toEqual({
+      userIds: [],
+      reason: 'requester',
+    });
+  });
 });
 
 function context(overrides: Partial<FleetGraphContext> = {}): FleetGraphContext {
