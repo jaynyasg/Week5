@@ -5,3 +5,4 @@ export * from './auth.js';
 export * from './workspace.js';
 export * from './document.js';
 export * from './assistant.js';
+export * from './fleetgraph.js';

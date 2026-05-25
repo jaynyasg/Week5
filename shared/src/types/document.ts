@@ -1,4 +1,5 @@
 // Document types
+import type { FleetGraphFindingProperties } from './fleetgraph.js';
 
 // Document visibility for private/workspace documents
 export type DocumentVisibility = 'private' | 'workspace';
@@ -180,7 +181,8 @@ export type DocumentType =
   | 'weekly_plan'
   | 'weekly_retro'
   | 'standup'
-  | 'weekly_review';
+  | 'weekly_review'
+  | 'fleetgraph_finding';
 
 // Issue states
 export type IssueState = 'triage' | 'backlog' | 'todo' | 'in_progress' | 'in_review' | 'done' | 'cancelled';
@@ -369,7 +371,8 @@ export type DocumentProperties =
   | WeeklyPlanProperties
   | WeeklyRetroProperties
   | StandupProperties
-  | WeeklyReviewProperties;
+  | WeeklyReviewProperties
+  | FleetGraphFindingProperties;
 
 // Base document interface
 export interface Document {
@@ -453,6 +456,11 @@ export interface StandupDocument extends Document {
 export interface WeeklyReviewDocument extends Document {
   document_type: 'weekly_review';
   properties: WeeklyReviewProperties;
+}
+
+export interface FleetGraphFindingDocument extends Document {
+  document_type: 'fleetgraph_finding';
+  properties: FleetGraphFindingProperties;
 }
 
 // Default project properties - ICE and owner start as null (not yet set)

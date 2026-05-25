@@ -420,6 +420,31 @@ const CONTEXT_ACTIONS: Record<DocumentType, ContextMenuItem[]> = {
       handlerKey: 'onCopyLink',
     },
   ],
+
+  // FleetGraph findings are system-authored documents; user actions happen in the FleetGraph surface.
+  fleetgraph_finding: [
+    {
+      type: 'action',
+      id: 'open',
+      label: 'Open',
+      singleOnly: true,
+      handlerKey: 'onOpen',
+    },
+    {
+      type: 'action',
+      id: 'open-new-tab',
+      label: 'Open in new tab',
+      singleOnly: true,
+      handlerKey: 'onOpenInNewTab',
+    },
+    {
+      type: 'action',
+      id: 'copy-link',
+      label: 'Copy link',
+      singleOnly: true,
+      handlerKey: 'onCopyLink',
+    },
+  ],
 };
 
 // Backlink-specific actions (not a document type, but used in BacklinksPanel)
