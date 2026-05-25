@@ -208,6 +208,7 @@ describe('FleetGraph schema foundation', () => {
       },
       observability: {
         tracesEnabled: false,
+        missingConfiguration: [],
       },
     };
 

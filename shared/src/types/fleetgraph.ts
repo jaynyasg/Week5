@@ -101,6 +101,7 @@ export interface FleetGraphStatusResponse {
   };
   observability: {
     tracesEnabled: boolean;
+    missingConfiguration: string[];
   };
 }
 
