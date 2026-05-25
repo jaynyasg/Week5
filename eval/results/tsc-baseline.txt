@@ -1,0 +1,11 @@
+
+> ship@0.0.0 type-check C:\Users\jaynyasg\OneDrive\Documents\GitLab\ship
+> pnpm --recursive run type-check
+
+Scope: 3 of 4 workspace projects
+shared type-check$ tsc --noEmit
+shared type-check: Done
+web type-check$ tsc --noEmit
+api type-check$ tsc --noEmit
+api type-check: Done
+web type-check: Done

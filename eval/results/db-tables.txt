@@ -1,0 +1,23 @@
+               List of relations
+ Schema |         Name          | Type  | Owner 
+--------+-----------------------+-------+-------
+ public | api_tokens            | table | ship
+ public | audit_logs            | table | ship
+ public | comments              | table | ship
+ public | document_associations | table | ship
+ public | document_history      | table | ship
+ public | document_links        | table | ship
+ public | document_snapshots    | table | ship
+ public | documents             | table | ship
+ public | files                 | table | ship
+ public | issue_iterations      | table | ship
+ public | oauth_state           | table | ship
+ public | schema_migrations     | table | ship
+ public | sessions              | table | ship
+ public | sprint_iterations     | table | ship
+ public | users                 | table | ship
+ public | workspace_invites     | table | ship
+ public | workspace_memberships | table | ship
+ public | workspaces            | table | ship
+(18 rows)
+

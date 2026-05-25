@@ -1,0 +1,133 @@
+{
+  "audit_unit": "U4 (API Response Time)",
+  "captured_at": "2026-05-19",
+  "tool": "autocannon 8.x via pnpm dlx",
+  "methodology": {
+    "duration_seconds_per_run": 10,
+    "concurrency_levels": [10, 25, 50],
+    "endpoints_tested": [
+      "GET /api/documents",
+      "GET /api/issues",
+      "GET /api/programs",
+      "GET /api/weeks",
+      "GET /api/dashboard"
+    ],
+    "auth": "Session cookie obtained via /api/auth/login with dev@ship.local credentials",
+    "test_environment": {
+      "host": "Windows 11 Pro, Node v24.15.0",
+      "api_env_vars": "E2E_TEST=1 (raises rate limit from 1000 to 10000 req/min in dev)",
+      "database": "Docker PostgreSQL 16, seeded with 257 documents",
+      "note_on_seed_volume": "PDF requirement is 500+ documents; Ship's seed produced 257. Baseline still meaningful for relative before/after comparison since the same 257-doc dataset will be used for the after-improvement runs."
+    }
+  },
+
+  "methodology_caveats": {
+    "rate_limiting_interference": "Ship's API has a rate limit configured at api/src/app.ts:81 (1000 req/min in dev, 10000 in test mode, 100 in production). Even at E2E_TEST=1 (10000/min), autocannon's max-throughput mode exceeds this for small-payload endpoints (dashboard, programs, weeks return small responses, so autocannon sends 5000-7000 req/s = 300000-420000 req/min, well over 10000). Documents and issues return 150KB+ per response, naturally throttling autocannon to ~130-243 req/s, which stays under the limit. Mitigation attempted: --rate flag to cap request rate, but the flag behaved inconsistently across endpoints.",
+    "rate_limit_finding": "The rate limit itself is a SECURITY POSITIVE — it correctly prevents DoS via flooding. Discovered during U4 baseline measurement. Audit-wise this confirms good defense-in-depth, not a defect. Documented in ORIENTATION.md and AUDIT.md.",
+    "incomplete_data": "Programs c=25/50, Weeks c=10/25, and Dashboard at all 3 levels were rate-limited and do not contain meaningful latency data. Listed as 'rate_limited' in results below."
+  },
+
+  "results_summary": {
+    "documents": {
+      "endpoint": "GET /api/documents",
+      "response_size_kb": 150,
+      "interpretation": "Returns ALL 257 documents WITH full content (TipTap JSON) and yjs_state (BYTEA). No projection, no pagination.",
+      "by_concurrency": [
+        { "connections": 10, "p50_ms": 75, "p90_ms": 98, "p95_ms": 115, "p99_ms": 130, "avg_ms": 76.31, "max_ms": 187, "req_per_sec": 129.9, "successful": 1299, "rate_limited": 0 },
+        { "connections": 25, "p50_ms": 175, "p90_ms": 232, "p95_ms": 283, "p99_ms": 329, "avg_ms": 177.75, "max_ms": 448, "req_per_sec": 139.6, "successful": 1396, "rate_limited": 0 },
+        { "connections": 50, "p50_ms": 387, "p90_ms": 444, "p95_ms": 479, "p99_ms": 494, "avg_ms": 385.17, "max_ms": 600, "req_per_sec": 127.4, "successful": 1274, "rate_limited": 0 }
+      ]
+    },
+    "issues": {
+      "endpoint": "GET /api/issues",
+      "interpretation": "Issue list returns issue documents. Lighter payload than documents but still substantial.",
+      "by_concurrency": [
+        { "connections": 10, "p50_ms": 52, "p90_ms": 68, "p95_ms": 80, "p99_ms": 86, "avg_ms": 53.14, "max_ms": 106, "req_per_sec": 186.2, "successful": 1862, "rate_limited": 0 },
+        { "connections": 25, "p50_ms": 101, "p90_ms": 142, "p95_ms": 192, "p99_ms": 226, "avg_ms": 109.18, "max_ms": 273, "req_per_sec": 227.1, "successful": 2271, "rate_limited": 0 },
+        { "connections": 50, "p50_ms": 192, "p90_ms": 256, "p95_ms": 314, "p99_ms": 332, "avg_ms": 203.03, "max_ms": 359, "req_per_sec": 243.8, "successful": 2438, "rate_limited": 0 }
+      ]
+    },
+    "programs": {
+      "endpoint": "GET /api/programs",
+      "interpretation": "Returns 5 programs. Small payload.",
+      "by_concurrency": [
+        { "connections": 10, "p50_ms": 15, "p90_ms": 22, "p95_ms": 26, "p99_ms": 29, "avg_ms": null, "req_per_sec": 608, "successful": 6082, "rate_limited": 0 },
+        { "connections": 25, "p50_ms": null, "p90_ms": null, "p95_ms": null, "p99_ms": null, "successful": 3908, "rate_limited": 10440, "note": "Partial — most responses rate-limited" },
+        { "connections": 50, "p50_ms": null, "p90_ms": null, "p95_ms": null, "p99_ms": null, "successful": 0, "rate_limited": 56370, "note": "Rate-limited — all responses 429" }
+      ]
+    },
+    "weeks": {
+      "endpoint": "GET /api/weeks",
+      "interpretation": "Returns week documents per program (~35 total weeks expected from seed).",
+      "by_concurrency": [
+        { "connections": 10, "p50_ms": null, "p90_ms": null, "p95_ms": null, "p99_ms": null, "successful": 0, "rate_limited": 59862, "note": "Rate-limited" },
+        { "connections": 25, "p50_ms": null, "p90_ms": null, "p95_ms": null, "p99_ms": null, "successful": 3935, "rate_limited": 15025, "note": "Partial" },
+        { "connections": 50, "p50_ms": 97, "p90_ms": 121, "p95_ms": 131, "p99_ms": 139, "avg_ms": null, "req_per_sec": 497, "successful": 4974, "rate_limited": 0 }
+      ]
+    },
+    "dashboard": {
+      "endpoint": "GET /api/dashboard",
+      "interpretation": "Returns aggregated dashboard data. Small payload, but rate limit prevented measurement at all concurrency levels.",
+      "by_concurrency": [
+        { "connections": 10, "p50_ms": null, "p90_ms": null, "p95_ms": null, "p99_ms": null, "successful": 0, "rate_limited": 54445, "note": "Rate-limited" },
+        { "connections": 25, "p50_ms": null, "p90_ms": null, "p95_ms": null, "p99_ms": null, "successful": 0, "rate_limited": 59320, "note": "Rate-limited" },
+        { "connections": 50, "p50_ms": null, "p90_ms": null, "p95_ms": null, "p99_ms": null, "successful": 0, "rate_limited": 48354, "note": "Rate-limited" }
+      ]
+    }
+  },
+
+  "headline_findings": [
+    {
+      "finding": "Documents endpoint shows clear degradation under concurrent load",
+      "evidence": "P95 latency: c=10 → 115ms, c=25 → 283ms (+146%), c=50 → 479ms (+316% vs c=10)",
+      "root_cause_hypothesis": "Returns ALL 257 documents WITH full content (TipTap JSON, ~5KB+ per doc) AND yjs_state (BYTEA, ~1-10KB per doc). No column projection, no pagination. Each request loads ~150KB and serializes/transmits it. At higher concurrency, multiple requests compete for the same heavy result set.",
+      "u13_target": "Documents P95 at c=25 from 283ms → 226ms (-20%) is the PDF improvement target. Achievable by: (a) SELECT only needed columns (id, document_type, title, properties, timestamps), excluding content and yjs_state from list responses; (b) optional: pagination."
+    },
+    {
+      "finding": "Issues endpoint shows similar degradation pattern",
+      "evidence": "P95 latency: c=10 → 80ms, c=25 → 192ms (+140%), c=50 → 314ms (+293% vs c=10)",
+      "root_cause_hypothesis": "Same underlying pattern as documents — likely same code path returning full document rows for issue documents. Issues filter by document_type='issue' but otherwise share the documents table.",
+      "u13_target": "Issues P95 at c=25 from 192ms → 154ms (-20%) — second easy win, same fix as documents."
+    },
+    {
+      "finding": "Small-payload endpoints (programs, dashboard, weeks) hit rate limit",
+      "evidence": "At max throughput, autocannon sends 5000-7000 req/s on small-response endpoints, exceeding even E2E_TEST mode's 10000/min limit.",
+      "interpretation": "This is GOOD security posture — Ship has rate limiting that correctly prevents flooding. The rate limit defends against DoS but limits our ability to benchmark sustained max-throughput on lightweight endpoints. Where data is available, programs c=10 (P95=26ms) and weeks c=50 (P95=131ms) show these endpoints are also affected by concurrency but the absolute numbers are much smaller."
+    }
+  ],
+
+  "improvement_target": {
+    "pdf_requirement": "20% reduction in P95 response time on at least 2 endpoints, measured under identical load conditions",
+    "selected_targets": [
+      { "endpoint": "documents", "concurrency": 25, "before_p95_ms": 283, "target_after_p95_ms": 226, "reduction_required": "20%" },
+      { "endpoint": "issues", "concurrency": 25, "before_p95_ms": 192, "target_after_p95_ms": 154, "reduction_required": "20%" }
+    ],
+    "approach_for_u13": [
+      "Apply column projection: list-view queries return id, document_type, title, properties, timestamps, ticket_number, parent_id, workspace_id — excluding content (JSONB) and yjs_state (BYTEA).",
+      "Add response field projection at API serialization layer if needed (different concerns can need different columns).",
+      "Verify via re-running autocannon: documents-c25 P95 should drop from 283ms toward <226ms.",
+      "No N+1 detected yet (queries are single-row from a single table); EXPLAIN ANALYZE planned for U4 next step to confirm."
+    ],
+    "feasibility_high": true,
+    "rationale": "Response size is the dominant cost. Cutting payload size by excluding content/yjs_state should yield far more than 20% improvement on P95."
+  },
+
+  "rate_limit_finding_for_audit": {
+    "configuration_location": "api/src/app.ts lines 70-87",
+    "rate_limit_settings": {
+      "production": "100 req/min",
+      "development": "1000 req/min (default; matches typical SaaS gateway)",
+      "test/E2E_TEST=1": "10000 req/min",
+      "applies_to": "All /api/* paths via app.use('/api/', apiLimiter)",
+      "windowMs": 60000,
+      "headers": "standardHeaders (RFC) enabled, legacyHeaders disabled"
+    },
+    "additional_protections": [
+      "Login endpoint has stricter brute-force protection: 5 failed attempts / 15 min (skipSuccessfulRequests=true)",
+      "DDoS server-level timeouts in api/src/index.ts: 60s request, 65s keepalive, 66s headers — Slowloris protection"
+    ],
+    "audit_classification": "Strong defense — calls out as one of the 3 strongest decisions in ORIENTATION.md §3.1"
+  },
+
+  "next_step_recommendation": "EXPLAIN ANALYZE the documents and issues list queries to confirm the response-size hypothesis and identify any other query-level issues (N+1, missing indexes). That feeds U4's Database Query Efficiency category."
+}

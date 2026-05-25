@@ -1,0 +1,69 @@
+                                                      Table "public.documents"
+      Column       |           Type           | Collation | Nullable |                           Default                            
+-------------------+--------------------------+-----------+----------+--------------------------------------------------------------
+ id                | uuid                     |           | not null | gen_random_uuid()
+ workspace_id      | uuid                     |           | not null | 
+ document_type     | document_type            |           | not null | 'wiki'::document_type
+ title             | text                     |           | not null | 'Untitled'::text
+ content           | jsonb                    |           |          | '{"type": "doc", "content": [{"type": "paragraph"}]}'::jsonb
+ yjs_state         | bytea                    |           |          | 
+ parent_id         | uuid                     |           |          | 
+ position          | integer                  |           |          | 0
+ properties        | jsonb                    |           |          | '{}'::jsonb
+ ticket_number     | integer                  |           |          | 
+ archived_at       | timestamp with time zone |           |          | 
+ deleted_at        | timestamp with time zone |           |          | 
+ started_at        | timestamp with time zone |           |          | 
+ completed_at      | timestamp with time zone |           |          | 
+ cancelled_at      | timestamp with time zone |           |          | 
+ reopened_at       | timestamp with time zone |           |          | 
+ converted_to_id   | uuid                     |           |          | 
+ converted_from_id | uuid                     |           |          | 
+ converted_at      | timestamp with time zone |           |          | 
+ converted_by      | uuid                     |           |          | 
+ original_type     | character varying(50)    |           |          | 
+ conversion_count  | integer                  |           |          | 0
+ created_at        | timestamp with time zone |           |          | now()
+ updated_at        | timestamp with time zone |           |          | now()
+ created_by        | uuid                     |           |          | 
+ visibility        | text                     |           | not null | 'workspace'::text
+Indexes:
+    "documents_pkey" PRIMARY KEY, btree (id)
+    "idx_documents_active" btree (workspace_id, document_type) WHERE archived_at IS NULL AND deleted_at IS NULL
+    "idx_documents_archived_at" btree (archived_at) WHERE archived_at IS NOT NULL
+    "idx_documents_converted_from" btree (converted_from_id) WHERE converted_from_id IS NOT NULL
+    "idx_documents_converted_to" btree (converted_to_id) WHERE converted_to_id IS NOT NULL
+    "idx_documents_deleted_at" btree (deleted_at) WHERE deleted_at IS NOT NULL
+    "idx_documents_document_type" btree (document_type)
+    "idx_documents_parent_id" btree (parent_id)
+    "idx_documents_person_user_id" btree ((properties ->> 'user_id'::text)) WHERE document_type = 'person'::document_type
+    "idx_documents_properties" gin (properties)
+    "idx_documents_visibility" btree (visibility)
+    "idx_documents_visibility_created_by" btree (visibility, created_by)
+    "idx_documents_workspace_id" btree (workspace_id)
+Check constraints:
+    "documents_no_self_parent" CHECK (id <> parent_id)
+    "documents_visibility_check" CHECK (visibility = ANY (ARRAY['private'::text, 'workspace'::text]))
+Foreign-key constraints:
+    "documents_converted_by_fkey" FOREIGN KEY (converted_by) REFERENCES users(id) ON DELETE SET NULL
+    "documents_converted_from_id_fkey" FOREIGN KEY (converted_from_id) REFERENCES documents(id) ON DELETE SET NULL
+    "documents_converted_to_id_fkey" FOREIGN KEY (converted_to_id) REFERENCES documents(id) ON DELETE SET NULL
+    "documents_created_by_fkey" FOREIGN KEY (created_by) REFERENCES users(id) ON DELETE SET NULL
+    "documents_parent_id_fkey" FOREIGN KEY (parent_id) REFERENCES documents(id) ON DELETE CASCADE
+    "documents_workspace_id_fkey" FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+Referenced by:
+    TABLE "comments" CONSTRAINT "comments_document_id_fkey" FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+    TABLE "document_associations" CONSTRAINT "document_associations_document_id_fkey" FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+    TABLE "document_associations" CONSTRAINT "document_associations_related_id_fkey" FOREIGN KEY (related_id) REFERENCES documents(id) ON DELETE CASCADE
+    TABLE "document_history" CONSTRAINT "document_history_document_id_fkey" FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+    TABLE "document_links" CONSTRAINT "document_links_source_id_fkey" FOREIGN KEY (source_id) REFERENCES documents(id) ON DELETE CASCADE
+    TABLE "document_links" CONSTRAINT "document_links_target_id_fkey" FOREIGN KEY (target_id) REFERENCES documents(id) ON DELETE CASCADE
+    TABLE "document_snapshots" CONSTRAINT "document_snapshots_document_id_fkey" FOREIGN KEY (document_id) REFERENCES documents(id) ON DELETE CASCADE
+    TABLE "documents" CONSTRAINT "documents_converted_from_id_fkey" FOREIGN KEY (converted_from_id) REFERENCES documents(id) ON DELETE SET NULL
+    TABLE "documents" CONSTRAINT "documents_converted_to_id_fkey" FOREIGN KEY (converted_to_id) REFERENCES documents(id) ON DELETE SET NULL
+    TABLE "documents" CONSTRAINT "documents_parent_id_fkey" FOREIGN KEY (parent_id) REFERENCES documents(id) ON DELETE CASCADE
+    TABLE "issue_iterations" CONSTRAINT "issue_iterations_issue_id_fkey" FOREIGN KEY (issue_id) REFERENCES documents(id) ON DELETE CASCADE
+    TABLE "sprint_iterations" CONSTRAINT "sprint_iterations_sprint_id_fkey" FOREIGN KEY (sprint_id) REFERENCES documents(id) ON DELETE CASCADE
+Triggers:
+    prevent_circular_parent_trigger BEFORE INSERT OR UPDATE OF parent_id ON documents FOR EACH ROW EXECUTE FUNCTION prevent_circular_parent()
+

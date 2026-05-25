@@ -1,0 +1,53 @@
+{
+  "captured_at": "2026-05-20T20:20:37.4278370Z",
+  "tool": "rg static grep counts",
+  "methodology": "Matches eval/results/type-safety-baseline.json patterns against web/src, api/src, shared/src.",
+  "totals": {
+    "explicit_any_type_annotation": 44.0,
+    "any_usage_broad": 275.0,
+    "type_assertions_as_capitalized": 225.0,
+    "non_null_assertions": 24.0,
+    "ts_ignore_directives": 1.0,
+    "conservative_total_grep_violations": 294.0,
+    "broad_total_grep_violations": 525.0
+  },
+  "baseline_comparison": {
+    "conservative_baseline": 399,
+    "conservative_after": 294.0,
+    "conservative_delta": -105.0,
+    "conservative_reduction_percent": 26.32,
+    "broad_baseline": 637,
+    "broad_after": 525.0,
+    "broad_delta": -112.0,
+    "broad_reduction_percent": 17.58
+  },
+  "by_package": {
+    "web/src": {
+      "explicit_any_type_annotation": 10,
+      "any_usage_broad": 50,
+      "type_assertions_as_capitalized": 164,
+      "non_null_assertions": 17,
+      "ts_ignore_directives": 1
+    },
+    "api/src": {
+      "explicit_any_type_annotation": 34,
+      "any_usage_broad": 224,
+      "type_assertions_as_capitalized": 61,
+      "non_null_assertions": 7,
+      "ts_ignore_directives": 0
+    },
+    "shared/src": {
+      "explicit_any_type_annotation": 0,
+      "any_usage_broad": 1,
+      "type_assertions_as_capitalized": 0,
+      "non_null_assertions": 0,
+      "ts_ignore_directives": 0
+    }
+  },
+  "type_coverage": {
+    "percentage": 93.96,
+    "covered_identifiers": 167537,
+    "total_identifiers": 178305,
+    "artifact": "eval/results/type-coverage-after.txt"
+  }
+}

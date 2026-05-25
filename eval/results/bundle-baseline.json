@@ -1,0 +1,119 @@
+{
+  "audit_unit": "U3 (Bundle Size)",
+  "captured_at": "2026-05-19",
+  "tool": "pnpm build:web (vite v6.4.1)",
+  "build_runtime_seconds": 10.16,
+  "modules_transformed": 980,
+  "command_used": "$env:VITE_API_URL=''; pnpm --filter @ship/web exec tsc; pnpm --filter @ship/web exec vite build",
+  "notes": "Windows-compatible workaround used: $env:VITE_API_URL = '' replaces the bash-style VITE_API_URL= prefix in the package.json build script. This is orientation finding #19 — Ship's build script is bash-only on stock setup.",
+
+  "totals": {
+    "dist_total_kb": 3848,
+    "dist_total_mb": 3.76,
+    "file_count": 301,
+    "js_file_count": 261,
+    "css_file_count": 1,
+    "static_assets_count": 39
+  },
+
+  "initial_page_load_bundle": {
+    "description": "Files the browser MUST download on first page visit before app renders. The lazy-loaded chunks are excluded since they only download when needed.",
+    "files": [
+      { "name": "index.html", "size_kb": 4.62, "gzip_kb": 1.17 },
+      { "name": "assets/index-DJeYp5na.css", "size_kb": 66.51, "gzip_kb": 12.92 },
+      { "name": "assets/index-C2vAyoQ1.js", "size_kb": 2073.70, "gzip_kb": 589.49 }
+    ],
+    "total_size_kb": 2144.83,
+    "total_gzip_kb": 603.58
+  },
+
+  "largest_chunk": {
+    "name": "assets/index-C2vAyoQ1.js",
+    "size_kb": 2073.70,
+    "gzip_kb": 589.49,
+    "exceeds_vite_warning_threshold": true,
+    "vite_warning_threshold_kb": 500,
+    "interpretation": "This is the main app bundle — contains TipTap editor, Yjs, React, React Router, TanStack Query, shadcn/ui components, date-fns, all page components, and all hooks. Everything that isn't already a lazy-loaded chunk is in here. Massive optimization target."
+  },
+
+  "lazy_chunks_observed": {
+    "description": "Ship already uses code splitting for some components — these are good, already-shipped lazy chunks.",
+    "patterns_found": [
+      "USWDS icon set is per-icon split (~210 individual icon chunks at 0.2-0.7 kB each)",
+      "Some Tab components are split: WeekIssuesTab (1.32 kB), ProgramIssuesTab (0.56 kB), WeekOverviewTab (1.89 kB), ProgramOverviewTab (1.74 kB), ProjectDetailsTab (3.60 kB), ProjectRetroTab (9.04 kB), WeekReviewTab (12.64 kB), ProgramWeeksTab (16.76 kB), ProgramProjectsTab (4.40 kB), ProjectWeeksTab (6.65 kB), WeekPlanningTab (2.99 kB), WeekStandupsTab (0.16 kB), StandupFeed (9.65 kB)",
+      "Existing splitting accounts for ~80 kB of code moved out of main bundle"
+    ],
+    "implication": "Code splitting IS in use but the main bundle still dominates at 2.07 MB — most of the application surface is not yet split."
+  },
+
+  "build_warnings_to_investigate": [
+    {
+      "warning": "Mixed dynamic + static imports defeating code splitting (1 of 2)",
+      "file": "web/src/services/upload.ts",
+      "detail": "Dynamically imported by web/src/components/editor/SlashCommands.tsx but ALSO statically imported by web/src/components/editor/FileAttachment.tsx and web/src/components/editor/ImageUpload.tsx. Vite says: 'dynamic import will not move module into another chunk.' The dynamic import intent is being defeated by the static imports.",
+      "audit_implication": "Easy U12 target — pick ONE pattern (all dynamic or all static). If we make it consistently dynamic, upload.ts moves out of the main bundle into its own chunk."
+    },
+    {
+      "warning": "Mixed dynamic + static imports defeating code splitting (2 of 2)",
+      "file": "web/src/components/editor/FileAttachment.tsx",
+      "detail": "Dynamically imported by web/src/components/editor/SlashCommands.tsx but ALSO statically imported by web/src/components/Editor.tsx. Same issue.",
+      "audit_implication": "Another easy U12 target."
+    }
+  ],
+
+  "static_assets_observed": {
+    "icon_pngs": [
+      { "name": "icons/blue/android-chrome-512x512.png", "size_kb": 132 },
+      { "name": "icons/blue/logo-1024.png", "size_kb": 270 },
+      { "name": "icons/blue/logo-512.png", "size_kb": 132 }
+    ],
+    "note": "PWA / browser manifest icons. Only loaded by browser on PWA install / specific browser hints — not on every page load. Not counted in initial-page-load bundle above."
+  },
+
+  "improvement_target": {
+    "pdf_requirement": "15% reduction in total production bundle size, OR 20% reduction in initial page load bundle via code splitting",
+
+    "target_total_reduction": {
+      "baseline_kb": 2073.70,
+      "target_reduction_kb": 311.06,
+      "target_total_after_kb": 1762.64,
+      "approach": "Remove genuinely unused dependencies from package.json, OR move large dependencies out of the main bundle via code splitting"
+    },
+
+    "target_initial_load_reduction": {
+      "baseline_initial_js_kb": 2073.70,
+      "target_initial_after_kb": 1658.96,
+      "target_kb_to_defer": 414.74,
+      "approach": "Move TipTap editor / Yjs / heavy page components to lazy chunks via React.lazy + Suspense. The editor alone likely exceeds 400 kB.",
+      "feasibility": "HIGH — there are obvious large dependencies (TipTap, Yjs) only needed on document-editor pages. Lazy-loading these is mechanical work."
+    },
+
+    "recommended_approach_for_u12": "Combination: (1) fix the 2 dynamic/static import conflicts (free wins), (2) lazy-load the document editor route via React.lazy, (3) verify no functionality removed. Should easily hit the 20% initial-load target."
+  },
+
+  "top_named_chunks_outside_main": [
+    { "name": "ProgramWeeksTab", "size_kb": 16.76, "gzip_kb": 5.53 },
+    { "name": "WeekReviewTab", "size_kb": 12.64, "gzip_kb": 3.67 },
+    { "name": "StandupFeed", "size_kb": 9.65, "gzip_kb": 2.89 },
+    { "name": "ProjectRetroTab", "size_kb": 9.04, "gzip_kb": 2.40 },
+    { "name": "ProjectWeeksTab", "size_kb": 6.65, "gzip_kb": 2.31 },
+    { "name": "ProgramProjectsTab", "size_kb": 4.40, "gzip_kb": 1.55 },
+    { "name": "ProjectDetailsTab", "size_kb": 3.60, "gzip_kb": 1.48 },
+    { "name": "WeekPlanningTab", "size_kb": 2.99, "gzip_kb": 1.48 }
+  ],
+
+  "interpretation": [
+    "Code splitting infrastructure is wired up — Ship is already lazy-loading per-Tab views and USWDS icons. But it stops at the page-Tab level; the underlying editor/Yjs/React Router/etc. still all bundle into the main chunk.",
+    "The 2.07 MB main chunk is a Category 2 hotspot. Vite itself warned. Fixing this is the obvious U12 target.",
+    "Two mixed dynamic/static import warnings indicate that even the existing splitting intent is being silently broken. Easy fixes.",
+    "Bundle analysis WITHOUT rollup-plugin-visualizer means we can't see per-dependency breakdown of the main chunk. But the named-chunk pattern reveals that everything not-Tab is in the main chunk — TipTap, Yjs, hooks, sidebars, all routes. This is enough to plan U12.",
+    "The PDF 'initial load reduction' target is dramatically easier to hit than 'total reduction' because there are obvious large surfaces (editor) that only need to load on document pages."
+  ],
+
+  "audit_implications": [
+    "AUDIT.md Category 2 will report the 2.07 MB main bundle as the headline finding.",
+    "U12 has clear, measurable work: fix 2 dynamic/static conflicts + lazy-load the editor route.",
+    "Pre-flight check for U12: confirm Ship is CSR-only (no SSR) before introducing React.lazy. Per ORIENTATION.md and docs/application-architecture.md, Ship is a React+Vite SPA with no SSR — confirmed CSR-only, React.lazy is safe.",
+    "If 'pnpm dlx vite-bundle-visualizer' or 'rollup-plugin-visualizer' is ever needed for U12 deep-dive, it can be added as a dev-time-only flag without modifying production builds. Out of scope for this baseline."
+  ]
+}

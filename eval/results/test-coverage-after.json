@@ -1,0 +1,43 @@
+{
+  "captured_at": "2026-05-20T19:38:46.729Z",
+  "command": "pnpm --filter @ship/api exec vitest run --coverage --coverage.reporter=json-summary --coverage.reportsDirectory=../eval/results/coverage-api-after",
+  "result": "pass",
+  "total_test_files": 28,
+  "total_tests": 455,
+  "passed": 455,
+  "failed": 0,
+  "coverage_summary_artifact": "eval/results/coverage-api-after/coverage-summary.json",
+  "coverage": {
+    "lines": {
+      "total": 8007,
+      "covered": 3305,
+      "skipped": 0,
+      "pct": 41.27
+    },
+    "statements": {
+      "total": 8276,
+      "covered": 3402,
+      "skipped": 0,
+      "pct": 41.1
+    },
+    "functions": {
+      "total": 603,
+      "covered": 250,
+      "skipped": 0,
+      "pct": 41.45
+    },
+    "branches": {
+      "total": 4487,
+      "covered": 1557,
+      "skipped": 0,
+      "pct": 34.7
+    },
+    "branchesTrue": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "note": "Coverage provider lockfile was refreshed from @vitest/coverage-v8 4.0.16 to 4.0.17 to match vitest 4.0.17 after the first coverage run exposed the mismatch. Re-run after adding documents and issues pagination tests."
+}

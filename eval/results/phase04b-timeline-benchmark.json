@@ -1,0 +1,41 @@
+{
+  "date": "2026-05-20T21:42:46.267Z",
+  "phase": "Phase 04B - Timeline Read Model",
+  "methodology": {
+    "seed": "pnpm db:seed on local PostgreSQL",
+    "measurement": "service-level timing of getProjectTimeline and getProgramTimeline using performance.now()",
+    "warmup_samples": 5,
+    "measured_samples": 40,
+    "note": "This measures the bounded timeline read-model query/service path before Phase 04C UI work. It is not an HTTP autocannon benchmark."
+  },
+  "project": {
+    "id": "36895899-52cb-4a0a-854a-e83439cccf29",
+    "title": "Ship Core - Core Features",
+    "rows": 18,
+    "dependencies": 0
+  },
+  "program": {
+    "id": "b8ed5c5e-3d3f-42fc-8ed1-078ebb47e757",
+    "title": "Ship Core",
+    "rows": 47,
+    "dependencies": 0
+  },
+  "timings": [
+    {
+      "label": "getProjectTimeline",
+      "samples": 40,
+      "min_ms": 4.19,
+      "p50_ms": 4.88,
+      "p95_ms": 7.72,
+      "max_ms": 8.25
+    },
+    {
+      "label": "getProgramTimeline",
+      "samples": 40,
+      "min_ms": 5.71,
+      "p50_ms": 8.21,
+      "p95_ms": 11.13,
+      "max_ms": 12.27
+    }
+  ]
+}

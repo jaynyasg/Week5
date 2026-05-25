@@ -1,0 +1,1698 @@
+import { Router, Request, Response } from 'express';
+import { pool } from '../db/client.js';
+import { z } from 'zod';
+import { authMiddleware } from '../middleware/auth.js';
+import { isWorkspaceAdmin } from '../middleware/visibility.js';
+import { handleVisibilityChange, invalidateDocumentCache, broadcastToUser } from '../collaboration/index.js';
+import { extractHypothesisFromContent, extractSuccessCriteriaFromContent, extractVisionFromContent, extractGoalsFromContent, checkDocumentCompleteness } from '../utils/extractHypothesis.js';
+import { loadContentFromYjsState } from '../utils/yjsConverter.js';
+
+type RouterType = ReturnType<typeof Router>;
+const router: RouterType = Router();
+const MAX_DOCUMENT_LIST_LIMIT = 500;
+const DEFAULT_DOCUMENT_PAGE_SIZE = 50;
+
+type DocumentListParam = string | boolean | number | null;
+type DocumentProperties = Record<string, unknown> & {
+  accountable_id?: string | null;
+  assignee_id?: string | null;
+  assignee_ids?: string[];
+  color?: string | null;
+  confidence?: number | null;
+  consulted_ids?: string[];
+  design_review_notes?: string | null;
+  ease?: number | null;
+  estimate?: number | null;
+  goals?: string | null;
+  has_design_review?: boolean | null;
+  impact?: number | null;
+  informed_ids?: string[];
+  is_complete?: boolean;
+  missing_fields?: string[];
+  owner_id?: string | null;
+  person_id?: string | null;
+  plan?: string | null;
+  plan_approval?: unknown;
+  prefix?: string | null;
+  priority?: string | null;
+  program_id?: string | null;
+  review_approval?: unknown;
+  review_rating?: unknown;
+  source?: string | null;
+  state?: string | null;
+  status?: string | null;
+  success_criteria?: string | null;
+  vision?: string | null;
+};
+type AccessibleDocumentRow = Record<string, unknown> & {
+  can_access: boolean;
+  converted_to_id?: string | null;
+  created_by?: string;
+  document_type?: string;
+  id?: string;
+  properties?: DocumentProperties | null;
+  ticket_number?: number | null;
+  title?: string;
+  visibility?: string;
+};
+
+function getQueryString(value: unknown): string | undefined {
+  if (value === undefined) return undefined;
+  const rawValue = Array.isArray(value) ? value[0] : value;
+  if (rawValue === undefined) return undefined;
+  return String(rawValue);
+}
+
+function parseIntegerQuery(
+  value: unknown,
+  fieldName: string,
+  options: { min: number; max?: number }
+): { value?: number; error?: string } {
+  const rawValue = getQueryString(value);
+  if (rawValue === undefined) return {};
+
+  if (rawValue.trim() === '') {
+    return { error: `${fieldName} must be an integer` };
+  }
+
+  const parsed = Number(rawValue);
+  if (!Number.isInteger(parsed) || parsed < options.min || (options.max !== undefined && parsed > options.max)) {
+    const range = options.max === undefined ? `at least ${options.min}` : `between ${options.min} and ${options.max}`;
+    return { error: `${fieldName} must be an integer ${range}` };
+  }
+
+  return { value: parsed };
+}
+
+function parseBooleanQuery(value: unknown, fieldName: string): { value?: boolean; error?: string } {
+  const rawValue = getQueryString(value);
+  if (rawValue === undefined) return {};
+  if (rawValue === 'true') return { value: true };
+  if (rawValue === 'false') return { value: false };
+  return { error: `${fieldName} must be true or false` };
+}
+
+// Check if user can access a document (visibility check)
+async function canAccessDocument(
+  docId: string,
+  userId: string,
+  workspaceId: string
+): Promise<{ canAccess: boolean; doc: AccessibleDocumentRow | null }> {
+  const result = await pool.query(
+    `SELECT d.*,
+            (d.visibility = 'workspace' OR d.created_by = $2 OR
+             (SELECT role FROM workspace_memberships WHERE workspace_id = $3 AND user_id = $2) = 'admin') as can_access
+     FROM documents d
+     WHERE d.id = $1 AND d.workspace_id = $3 AND d.deleted_at IS NULL`,
+    [docId, userId, workspaceId]
+  );
+
+  if (result.rows.length === 0) {
+    return { canAccess: false, doc: null };
+  }
+
+  const doc = result.rows[0] as AccessibleDocumentRow;
+  return { canAccess: doc.can_access, doc };
+}
+
+// Validation schemas
+const createDocumentSchema = z.object({
+  title: z.string().min(1).max(255).optional().default('Untitled'),
+  document_type: z.enum(['wiki', 'issue', 'program', 'project', 'sprint', 'person', 'weekly_plan', 'weekly_retro']).optional().default('wiki'),
+  parent_id: z.string().uuid().optional().nullable(),
+  program_id: z.string().uuid().optional().nullable(),
+  sprint_id: z.string().uuid().optional().nullable(),
+  properties: z.record(z.unknown()).optional(),
+  visibility: z.enum(['private', 'workspace']).optional(),
+  content: z.unknown().optional(),
+  belongs_to: z.array(z.object({
+    id: z.string().uuid(),
+    type: z.enum(['program', 'project', 'sprint', 'parent']),
+  })).optional(),
+});
+
+const updateDocumentSchema = z.object({
+  title: z.string().min(1).max(255).optional(),
+  content: z.unknown().optional(),
+  parent_id: z.string().uuid().optional().nullable(),
+  position: z.number().int().min(0).optional(),
+  properties: z.record(z.unknown()).optional(),
+  visibility: z.enum(['private', 'workspace']).optional(),
+  document_type: z.enum(['wiki', 'issue', 'program', 'project', 'sprint', 'person']).optional(),
+  // Issue-specific fields (stored in properties but accepted at top level for convenience)
+  state: z.string().optional(),
+  priority: z.string().optional(),
+  estimate: z.number().nullable().optional(),
+  assignee_id: z.string().uuid().nullable().optional(),
+  source: z.enum(['internal', 'external']).optional(),
+  rejection_reason: z.string().nullable().optional(),
+  belongs_to: z.array(z.object({
+    id: z.string().uuid(),
+    type: z.enum(['program', 'project', 'sprint', 'parent']),
+  })).optional(),
+  confirm_orphan_children: z.boolean().optional(),
+  // Project-specific fields (stored in properties but accepted at top level)
+  impact: z.number().min(1).max(10).nullable().optional(),
+  confidence: z.number().min(1).max(10).nullable().optional(),
+  ease: z.number().min(1).max(10).nullable().optional(),
+  color: z.string().optional(),
+  owner_id: z.string().uuid().nullable().optional(),
+  has_design_review: z.boolean().nullable().optional(),
+  design_review_notes: z.string().max(2000).nullable().optional(),
+  // RACI fields for projects and programs (stored in properties)
+  accountable_id: z.string().uuid().nullable().optional(), // A - Accountable (approver)
+  consulted_ids: z.array(z.string().uuid()).optional(), // C - Consulted (provide input)
+  informed_ids: z.array(z.string().uuid()).optional(), // I - Informed (kept in loop)
+  // Common association fields (shared across document types)
+  program_id: z.string().uuid().nullable().optional(),
+  sprint_id: z.string().uuid().nullable().optional(),
+  // Sprint-specific fields (stored in properties but accepted at top level)
+  // Note: start_date/end_date are computed from sprint_number + workspace.sprint_start_date
+  status: z.enum(['planning', 'active', 'completed']).optional(),
+  hypothesis: z.string().optional(),
+  plan: z.string().optional(), // Alias for hypothesis (frontend sends 'plan', stored as 'plan' in properties)
+});
+
+// List documents
+router.get('/', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const type = getQueryString(req.query.type);
+    const parentId = getQueryString(req.query.parent_id);
+    const limitParse = parseIntegerQuery(req.query.limit, 'limit', { min: 1, max: MAX_DOCUMENT_LIST_LIMIT });
+    const offsetParse = parseIntegerQuery(req.query.offset, 'offset', { min: 0 });
+    const pageParse = parseIntegerQuery(req.query.page, 'page', { min: 1 });
+    const perPageParse = parseIntegerQuery(req.query.per_page, 'per_page', { min: 1, max: MAX_DOCUMENT_LIST_LIMIT });
+    const includeTotalParse = parseBooleanQuery(req.query.include_total, 'include_total');
+
+    if (limitParse.error || offsetParse.error || pageParse.error || perPageParse.error || includeTotalParse.error) {
+      res.status(400).json({
+        error: limitParse.error || offsetParse.error || pageParse.error || perPageParse.error || includeTotalParse.error,
+      });
+      return;
+    }
+
+    const usesPagePagination = req.query.page !== undefined || req.query.per_page !== undefined;
+
+    if (
+      usesPagePagination &&
+      req.query.limit !== undefined &&
+      req.query.per_page !== undefined &&
+      limitParse.value !== perPageParse.value
+    ) {
+      res.status(400).json({
+        error: 'limit and per_page must match when both are provided',
+      });
+      return;
+    }
+
+    if (usesPagePagination && req.query.offset !== undefined) {
+      res.status(400).json({
+        error: 'offset cannot be combined with page or per_page',
+      });
+      return;
+    }
+
+    const page = usesPagePagination ? (pageParse.value ?? 1) : undefined;
+    const pageSize = usesPagePagination
+      ? (perPageParse.value ?? limitParse.value ?? DEFAULT_DOCUMENT_PAGE_SIZE)
+      : limitParse.value;
+    const limit = pageSize;
+    const offset = usesPagePagination ? ((page ?? 1) - 1) * (pageSize ?? DEFAULT_DOCUMENT_PAGE_SIZE) : (offsetParse.value ?? 0);
+    const includeTotal = usesPagePagination ? (includeTotalParse.value ?? true) : (includeTotalParse.value ?? false);
+
+    if (limit === undefined && (req.query.offset !== undefined || req.query.include_total !== undefined)) {
+      res.status(400).json({
+        error: 'limit is required when offset or include_total is provided',
+      });
+      return;
+    }
+
+    const userId = req.userId!;
+    const workspaceId = req.workspaceId!;
+
+    // Check if user is admin (admins can see all documents)
+    const isAdmin = await isWorkspaceAdmin(userId, workspaceId);
+
+    const whereClauses = [
+      'workspace_id = $1',
+      'archived_at IS NULL',
+      'deleted_at IS NULL',
+      "(visibility = 'workspace' OR created_by = $2 OR $3 = TRUE)",
+    ];
+    const params: DocumentListParam[] = [workspaceId, userId, isAdmin];
+
+    if (type) {
+      whereClauses.push(`document_type = $${params.length + 1}`);
+      params.push(type);
+    }
+
+    if (req.query.parent_id !== undefined) {
+      if (parentId === 'null' || parentId === '') {
+        whereClauses.push('parent_id IS NULL');
+      } else {
+        whereClauses.push(`parent_id = $${params.length + 1}`);
+        params.push(parentId ?? null);
+      }
+    }
+
+    const whereSql = whereClauses.join('\n        AND ');
+    const filterParams = [...params];
+
+    let query = `
+      SELECT id, workspace_id, document_type, title, parent_id, position,
+             ticket_number, properties,
+             created_at, updated_at, created_by, visibility
+      FROM documents
+      WHERE ${whereSql}
+      ORDER BY position ASC, created_at DESC
+    `;
+
+    if (limit !== undefined) {
+      query += ` LIMIT $${params.length + 1} OFFSET $${params.length + 2}`;
+      params.push(limit + 1, offset);
+    }
+
+    const result = await pool.query(query, params);
+    const rows = limit === undefined ? result.rows : result.rows.slice(0, limit);
+    const hasMore = limit !== undefined && result.rows.length > limit;
+
+    // Extract properties into flat fields for backwards compatibility
+    const documents = rows.map(row => {
+      const props = row.properties || {};
+      return {
+        ...row,
+        // Flatten common properties for backwards compatibility
+        state: props.state,
+        priority: props.priority,
+        estimate: props.estimate,
+        assignee_id: props.assignee_id,
+        source: props.source,
+        prefix: props.prefix,
+        color: props.color,
+      };
+    });
+
+    if (limit !== undefined) {
+      let total: number | undefined;
+      if (includeTotal) {
+        const countResult = await pool.query(
+          `SELECT COUNT(*)::int AS total FROM documents WHERE ${whereSql}`,
+          filterParams
+        );
+        total = countResult.rows[0]?.total;
+      }
+
+      res.json({
+        items: documents,
+        pagination: {
+          limit,
+          offset,
+          ...(usesPagePagination ? { page, per_page: limit } : {}),
+          returned: documents.length,
+          has_more: hasMore,
+          ...(total !== undefined ? { total } : {}),
+          ...(usesPagePagination && total !== undefined ? { total_count: total } : {}),
+        },
+      });
+      return;
+    }
+
+    res.json(documents);
+  } catch (err) {
+    console.error('List documents error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// List converted documents (archived originals that were converted to another type)
+router.get('/converted/list', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const userId = String(req.userId);
+    const workspaceId = String(req.workspaceId);
+    const { original_type, converted_type } = req.query;
+
+    // Only show documents the user can access (workspace-visible or owned by user)
+    let query = `
+      SELECT d.id, d.title, d.document_type as original_type, d.ticket_number,
+             d.converted_to_id, d.converted_at, d.converted_by,
+             d.created_at, d.updated_at,
+             converted_doc.document_type as converted_type,
+             converted_doc.title as converted_title,
+             converted_doc.ticket_number as converted_ticket_number,
+             converter.name as converted_by_name
+      FROM documents d
+      INNER JOIN documents converted_doc ON d.converted_to_id = converted_doc.id
+      LEFT JOIN users converter ON d.converted_by = converter.id
+      WHERE d.workspace_id = $1
+        AND d.converted_to_id IS NOT NULL
+        AND d.archived_at IS NOT NULL
+        AND (d.visibility = 'workspace' OR d.created_by = $2)
+        AND (converted_doc.visibility = 'workspace' OR converted_doc.created_by = $2)
+    `;
+    const params: (string | null)[] = [workspaceId, userId];
+
+    // Filter by original document type
+    if (original_type && typeof original_type === 'string') {
+      params.push(original_type);
+      query += ` AND d.document_type = $${params.length}`;
+    }
+
+    // Filter by converted document type
+    if (converted_type && typeof converted_type === 'string') {
+      params.push(converted_type);
+      query += ` AND converted_doc.document_type = $${params.length}`;
+    }
+
+    query += ` ORDER BY d.converted_at DESC NULLS LAST, d.updated_at DESC`;
+
+    const result = await pool.query(query, params);
+
+    const conversions = result.rows.map(row => ({
+      original_id: row.id,
+      original_title: row.title,
+      original_type: row.original_type,
+      original_ticket_number: row.ticket_number,
+      converted_id: row.converted_to_id,
+      converted_title: row.converted_title,
+      converted_type: row.converted_type,
+      converted_ticket_number: row.converted_ticket_number,
+      converted_at: row.converted_at,
+      converted_by: row.converted_by,
+      converted_by_name: row.converted_by_name,
+    }));
+
+    res.json(conversions);
+  } catch (err) {
+    console.error('List converted documents error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get single document
+router.get('/:id', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const userId = String(req.userId);
+    const workspaceId = String(req.workspaceId);
+
+    const { canAccess, doc } = await canAccessDocument(id, userId, workspaceId);
+
+    if (!doc) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    if (!canAccess) {
+      // Return 404 for private docs user can't access (to not reveal existence)
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    // LEGACY: Handle old-style conversions that created new documents
+    // New conversions (2024+) use in-place updates with snapshots, so converted_to_id won't be set.
+    // This redirect only applies to documents converted before the in-place model was implemented.
+    if (doc.converted_to_id && doc.converted_to_id !== doc.id) {
+      // Fetch the new document to determine its type for proper routing
+      const newDocResult = await pool.query(
+        'SELECT id, document_type FROM documents WHERE id = $1 AND workspace_id = $2',
+        [doc.converted_to_id, workspaceId]
+      );
+
+      if (newDocResult.rows.length > 0) {
+        const newDoc = newDocResult.rows[0];
+        // Return 301 with Location header to the new document's API endpoint
+        res.set('X-Converted-Type', newDoc.document_type);
+        res.set('X-Converted-To', newDoc.id);
+        res.redirect(301, `/api/documents/${newDoc.id}`);
+        return;
+      }
+    }
+
+    const props = doc.properties || {};
+
+    // Get owner details for projects (owner_id is a user_id, lookup person document by user_id)
+    // Return user_id as id so PersonCombobox can match correctly
+    let owner: { id: string; name: string; email: string } | null = null;
+    if (doc.document_type === 'project' && props.owner_id) {
+      const ownerResult = await pool.query(
+        `SELECT (d.properties->>'user_id')::text as id, d.title as name, COALESCE(d.properties->>'email', u.email) as email
+         FROM documents d
+         LEFT JOIN users u ON u.id = (d.properties->>'user_id')::uuid
+         WHERE (d.properties->>'user_id')::uuid = $1 AND d.workspace_id = $2 AND d.document_type = 'person'`,
+        [props.owner_id, workspaceId]
+      );
+      if (ownerResult.rows.length > 0) {
+        owner = ownerResult.rows[0];
+      }
+    }
+
+    // Get owner details for sprints (owner stored in assignee_ids[0], consistent with sprints API)
+    // Return user_id as id so Combobox can match correctly
+    if (doc.document_type === 'sprint' && Array.isArray(props.assignee_ids) && props.assignee_ids[0]) {
+      const ownerResult = await pool.query(
+        `SELECT u.id::text as id, d.title as name, COALESCE(d.properties->>'email', u.email) as email
+         FROM users u
+         LEFT JOIN documents d ON (d.properties->>'user_id')::uuid = u.id AND d.document_type = 'person' AND d.workspace_id = $2
+         WHERE u.id = $1`,
+        [props.assignee_ids[0], workspaceId]
+      );
+      if (ownerResult.rows.length > 0) {
+        owner = ownerResult.rows[0];
+      }
+    }
+
+    // Compute title for weekly_plan/weekly_retro documents (includes person name for entity reference)
+    let computedTitle = doc.title;
+    if ((doc.document_type === 'weekly_plan' || doc.document_type === 'weekly_retro') && props.person_id) {
+      const personResult = await pool.query(
+        `SELECT title FROM documents WHERE id = $1 AND workspace_id = $2 AND document_type = 'person'`,
+        [props.person_id, workspaceId]
+      );
+      if (personResult.rows.length > 0) {
+        const personName = personResult.rows[0].title;
+        computedTitle = `${doc.title} - ${personName}`;
+      }
+    }
+
+    // Get belongs_to associations from junction table (for issues, wikis, sprints, and projects)
+    let belongs_to: Array<{ id: string; type: string; title?: string; color?: string }> = [];
+    if (doc.document_type === 'issue' || doc.document_type === 'wiki' || doc.document_type === 'sprint' || doc.document_type === 'project') {
+      const assocResult = await pool.query(
+        `SELECT da.related_id as id, da.relationship_type as type,
+                d.title, (d.properties->>'color') as color
+         FROM document_associations da
+         LEFT JOIN documents d ON d.id = da.related_id
+         WHERE da.document_id = $1`,
+        [id]
+      );
+      belongs_to = assocResult.rows.map(row => ({
+        id: row.id,
+        type: row.type,
+        title: row.title || undefined,
+        color: row.color || undefined,
+      }));
+    }
+
+    // Return with flattened properties for backwards compatibility
+    res.json({
+      ...doc,
+      // Use computed title for weekly_plan/weekly_retro (includes person name)
+      title: computedTitle,
+      // Issue properties
+      state: props.state,
+      priority: props.priority,
+      estimate: props.estimate,
+      assignee_id: props.assignee_id,
+      source: props.source,
+      // Project properties
+      impact: props.impact,
+      confidence: props.confidence,
+      ease: props.ease,
+      // For sprints, owner is stored in assignee_ids[0] (consistent with sprints API)
+      owner_id: doc.document_type === 'sprint' && Array.isArray(props.assignee_ids)
+        ? props.assignee_ids[0] || null
+        : props.owner_id,
+      owner,
+      // RACI properties (for projects and programs)
+      accountable_id: props.accountable_id || null,
+      consulted_ids: props.consulted_ids || [],
+      informed_ids: props.informed_ids || [],
+      // Design review (for projects)
+      has_design_review: props.has_design_review ?? null,
+      design_review_notes: props.design_review_notes || null,
+      // Generic properties
+      prefix: props.prefix,
+      color: props.color,
+      // Sprint properties (dates computed from sprint_number + workspace.sprint_start_date)
+      status: props.status,
+      plan: props.plan,
+      plan_approval: props.plan_approval,
+      review_approval: props.review_approval,
+      review_rating: props.review_rating,
+      // Include belongs_to for issue, wiki, sprint, and project documents
+      ...((doc.document_type === 'issue' || doc.document_type === 'wiki' || doc.document_type === 'sprint' || doc.document_type === 'project') && { belongs_to }),
+    });
+  } catch (err) {
+    console.error('Get document error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Get document content as TipTap JSON
+// This endpoint converts Yjs state to TipTap JSON if content is null
+// Useful for API-based document editing without using the collaborative editor
+router.get('/:id/content', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const userId = String(req.userId);
+    const workspaceId = String(req.workspaceId);
+
+    // Verify document exists and user can access it
+    const result = await pool.query(
+      `SELECT d.id, d.content, d.yjs_state, d.title,
+              (d.visibility = 'workspace' OR d.created_by = $2 OR
+               (SELECT role FROM workspace_memberships WHERE workspace_id = $3 AND user_id = $2) = 'admin') as can_access
+       FROM documents d
+       WHERE d.id = $1 AND d.workspace_id = $3 AND d.archived_at IS NULL AND d.deleted_at IS NULL`,
+      [id, userId, workspaceId]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    const doc = result.rows[0];
+
+    if (!doc.can_access) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    let content = doc.content;
+
+    // If content is null but yjs_state exists, convert Yjs to TipTap JSON
+    if (!content && doc.yjs_state) {
+      content = loadContentFromYjsState(doc.yjs_state);
+
+      if (!content) {
+        res.status(500).json({ error: 'Failed to convert document content' });
+        return;
+      }
+    }
+
+    // Return content with document metadata
+    res.json({
+      id: doc.id,
+      title: doc.title,
+      content: content || { type: 'doc', content: [] },
+    });
+  } catch (err) {
+    console.error('Get document content error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Update document content with TipTap JSON
+// This endpoint updates content and clears yjs_state (forcing regeneration)
+// Useful for API-based document editing without using the collaborative editor
+router.patch('/:id/content', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const userId = String(req.userId);
+    const workspaceId = String(req.workspaceId);
+
+    // Validate content structure
+    const { content } = req.body;
+    if (!content || typeof content !== 'object') {
+      res.status(400).json({ error: 'Content is required and must be a valid TipTap JSON object' });
+      return;
+    }
+
+    // Validate TipTap JSON structure
+    if (content.type !== 'doc' || !Array.isArray(content.content)) {
+      res.status(400).json({
+        error: 'Invalid content structure. Content must be a TipTap document with type "doc" and a content array.',
+        expected: { type: 'doc', content: [{ type: 'paragraph', content: [{ type: 'text', text: '...' }] }] },
+        received: { type: content.type, hasContentArray: Array.isArray(content.content) },
+      });
+      return;
+    }
+
+    // Verify document exists and user can access it
+    const { canAccess, doc: existing } = await canAccessDocument(id, userId, workspaceId);
+
+    if (!existing) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    if (!canAccess) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    // Extract hypothesis, success criteria, vision, and goals from content
+    const extractedHypothesis = extractHypothesisFromContent(content);
+    const extractedCriteria = extractSuccessCriteriaFromContent(content);
+    const extractedVision = extractVisionFromContent(content);
+    const extractedGoals = extractGoalsFromContent(content);
+
+    // Merge with existing properties (extracted values always win)
+    // Note: 'plan' is the canonical field name (renamed from 'hypothesis' in migration 032)
+    const currentProps = existing.properties || {};
+    const newProps = {
+      ...currentProps,
+      plan: extractedHypothesis,
+      success_criteria: extractedCriteria,
+      vision: extractedVision,
+      goals: extractedGoals,
+    };
+
+    // Update content and clear yjs_state (forces regeneration on next collaboration session)
+    const result = await pool.query(
+      `UPDATE documents
+       SET content = $1, yjs_state = NULL, properties = $2, updated_at = now()
+       WHERE id = $3 AND workspace_id = $4
+       RETURNING id, title, content`,
+      [JSON.stringify(content), JSON.stringify(newProps), id, workspaceId]
+    );
+
+    // Invalidate collaboration cache so connected clients get fresh content
+    invalidateDocumentCache(id);
+
+    res.json({
+      id: result.rows[0].id,
+      title: result.rows[0].title,
+      content: result.rows[0].content,
+    });
+  } catch (err) {
+    console.error('Update document content error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Create document
+router.post('/', authMiddleware, async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const parsed = createDocumentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid input', details: parsed.error.errors });
+      return;
+    }
+
+    const { title, document_type, parent_id, program_id, sprint_id, properties, content, belongs_to } = parsed.data;
+    let { visibility } = parsed.data;
+
+    // If parent_id is provided and visibility is not specified, inherit from parent
+    if (parent_id && !visibility) {
+      const parentResult = await client.query(
+        'SELECT visibility FROM documents WHERE id = $1 AND workspace_id = $2',
+        [parent_id, req.workspaceId]
+      );
+      if (parentResult.rows[0]) {
+        visibility = parentResult.rows[0].visibility;
+      }
+    }
+
+    // Default to 'workspace' visibility if not specified
+    visibility = visibility || 'workspace';
+
+    await client.query('BEGIN');
+
+    const result = await client.query(
+      `INSERT INTO documents (workspace_id, document_type, title, parent_id, properties, created_by, visibility, content)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+       RETURNING *`,
+      [req.workspaceId, document_type, title, parent_id || null, JSON.stringify(properties || {}), req.userId, visibility, content ? JSON.stringify(content) : null]
+    );
+
+    const newDoc = result.rows[0];
+
+    // Handle belongs_to associations (creates document_associations records)
+    if (belongs_to && belongs_to.length > 0) {
+      for (const assoc of belongs_to) {
+        await client.query(
+          `INSERT INTO document_associations (document_id, related_id, relationship_type)
+           VALUES ($1, $2, $3)
+           ON CONFLICT (document_id, related_id, relationship_type) DO NOTHING`,
+          [newDoc.id, assoc.id, assoc.type]
+        );
+      }
+    }
+
+    // Handle sprint_id via document_associations (backward compatibility)
+    if (sprint_id) {
+      await client.query(
+        `INSERT INTO document_associations (document_id, related_id, relationship_type)
+         VALUES ($1, $2, 'sprint')
+         ON CONFLICT (document_id, related_id, relationship_type) DO NOTHING`,
+        [newDoc.id, sprint_id]
+      );
+    }
+
+    // Handle program_id via document_associations (mirrors column for junction table queries)
+    if (program_id) {
+      await client.query(
+        `INSERT INTO document_associations (document_id, related_id, relationship_type)
+         VALUES ($1, $2, 'program')
+         ON CONFLICT (document_id, related_id, relationship_type) DO NOTHING`,
+        [newDoc.id, program_id]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    // Broadcast accountability update for document types that affect action items
+    // Sprint plans clear the "write sprint plan" action item
+    // Documents with outcome property linked to sprints clear the "write retro" action item
+    if (document_type === 'weekly_plan' || (properties && 'outcome' in properties)) {
+      broadcastToUser(req.userId!, 'accountability:updated', { documentId: newDoc.id, documentType: document_type });
+    }
+
+    res.status(201).json(newDoc);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Create document error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
+  }
+});
+
+// Update document
+router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const id = String(req.params.id);
+    const userId = String(req.userId);
+    const workspaceId = String(req.workspaceId);
+
+    const parsed = updateDocumentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid input', details: parsed.error.errors });
+      return;
+    }
+
+    // Verify document exists and user can access it
+    const { canAccess, doc: existing } = await canAccessDocument(id, userId, workspaceId);
+
+    if (!existing) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    if (!canAccess) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    const data = parsed.data;
+
+    // Check permission for visibility changes
+    if (data.visibility !== undefined && data.visibility !== existing.visibility) {
+      const isCreator = existing.created_by === userId;
+      const isAdmin = await isWorkspaceAdmin(userId, workspaceId);
+
+      if (!isCreator && !isAdmin) {
+        res.status(403).json({ error: 'Only the creator or admin can change document visibility' });
+        return;
+      }
+    }
+
+    // Handle moving private doc to workspace parent (changes visibility to workspace)
+    if (data.parent_id !== undefined && data.parent_id !== null && data.visibility === undefined) {
+      const parentResult = await client.query(
+        'SELECT visibility FROM documents WHERE id = $1 AND workspace_id = $2',
+        [data.parent_id, workspaceId]
+      );
+      if (parentResult.rows[0]?.visibility === 'workspace' && existing.visibility === 'private') {
+        // Moving private doc under workspace parent makes it workspace-visible
+        data.visibility = 'workspace';
+      }
+    }
+
+    await client.query('BEGIN');
+
+    const updates: string[] = [];
+    const values: unknown[] = [];
+    let paramIndex = 1;
+
+    // Track extracted values from content (content is source of truth)
+    let extractedHypothesis: string | null = null;
+    let extractedCriteria: string | null = null;
+    let extractedVision: string | null = null;
+    let extractedGoals: string | null = null;
+    let contentUpdated = false;
+    let resubmissionTarget: { sprintId: string; reviewerUserId: string | null } | null = null;
+
+    if (data.title !== undefined) {
+      updates.push(`title = $${paramIndex++}`);
+      values.push(data.title);
+    }
+    if (data.content !== undefined) {
+      updates.push(`content = $${paramIndex++}`);
+      values.push(JSON.stringify(data.content));
+      // Clear yjs_state when content is updated via API
+      // This forces the collaboration server to regenerate Yjs state from new content
+      updates.push(`yjs_state = NULL`);
+
+      // Extract hypothesis, success criteria, vision, and goals from content (content is source of truth)
+      extractedHypothesis = extractHypothesisFromContent(data.content);
+      extractedCriteria = extractSuccessCriteriaFromContent(data.content);
+      extractedVision = extractVisionFromContent(data.content);
+      extractedGoals = extractGoalsFromContent(data.content);
+      contentUpdated = true;
+    }
+    if (data.parent_id !== undefined) {
+      updates.push(`parent_id = $${paramIndex++}`);
+      values.push(data.parent_id);
+    }
+    // Note: program_id is handled via document_associations table (see below)
+    // Note: sprint_id is handled via document_associations table (see below)
+    if (data.position !== undefined) {
+      updates.push(`position = $${paramIndex++}`);
+      values.push(data.position);
+    }
+
+    // Extract top-level issue/project/sprint fields that should be stored in properties
+    const topLevelProps: Record<string, unknown> = {};
+    if (data.state !== undefined) topLevelProps.state = data.state;
+    if (data.priority !== undefined) topLevelProps.priority = data.priority;
+    if (data.estimate !== undefined) topLevelProps.estimate = data.estimate;
+    if (data.assignee_id !== undefined) topLevelProps.assignee_id = data.assignee_id;
+    if (data.source !== undefined) topLevelProps.source = data.source;
+    if (data.rejection_reason !== undefined) topLevelProps.rejection_reason = data.rejection_reason;
+    if (data.impact !== undefined) topLevelProps.impact = data.impact;
+    if (data.confidence !== undefined) topLevelProps.confidence = data.confidence;
+    if (data.ease !== undefined) topLevelProps.ease = data.ease;
+    if (data.color !== undefined) topLevelProps.color = data.color;
+    if (data.owner_id !== undefined) topLevelProps.owner_id = data.owner_id;
+    // RACI fields for projects
+    if (data.accountable_id !== undefined) topLevelProps.accountable_id = data.accountable_id;
+    if (data.consulted_ids !== undefined) topLevelProps.consulted_ids = data.consulted_ids;
+    if (data.informed_ids !== undefined) topLevelProps.informed_ids = data.informed_ids;
+    // Design review fields for projects
+    if (data.has_design_review !== undefined) topLevelProps.has_design_review = data.has_design_review;
+    if (data.design_review_notes !== undefined) topLevelProps.design_review_notes = data.design_review_notes;
+    // For sprints, also store owner in assignee_ids array (sprints API reads from assignee_ids[0])
+    if (data.owner_id !== undefined && existing.document_type === 'sprint') {
+      topLevelProps.assignee_ids = data.owner_id ? [data.owner_id] : [];
+    }
+    // Note: start_date/end_date are computed from sprint_number + workspace.sprint_start_date
+    if (data.status !== undefined) topLevelProps.status = data.status;
+    // Note: hypothesis/plan can be set via API but content extraction always wins when content is updated
+    // Accept both 'hypothesis' (legacy) and 'plan' (current), store as 'plan'
+    if (data.hypothesis !== undefined) topLevelProps.plan = data.hypothesis;
+    // Plan field (frontend sends 'plan' for sprint documents, stored in properties.plan)
+    if (data.plan !== undefined) topLevelProps.plan = data.plan;
+    // RACI fields (for projects and programs)
+    if (data.accountable_id !== undefined) topLevelProps.accountable_id = data.accountable_id;
+    if (data.consulted_ids !== undefined) topLevelProps.consulted_ids = data.consulted_ids;
+    if (data.informed_ids !== undefined) topLevelProps.informed_ids = data.informed_ids;
+
+    const hasTopLevelProps = Object.keys(topLevelProps).length > 0;
+
+    // Restrict reports_to changes on person documents to workspace admins
+    if (existing.document_type === 'person' && data.properties?.reports_to !== undefined) {
+      const isAdmin = await isWorkspaceAdmin(userId, workspaceId);
+      if (!isAdmin) {
+        res.status(403).json({ error: 'Only workspace admins can set the reports_to field' });
+        return;
+      }
+    }
+
+    // Handle properties update - merge existing, data.properties, top-level fields, and extracted values
+    // Content is source of truth: extracted values override any manually set hypothesis/success_criteria/vision/goals
+    if (data.properties !== undefined || contentUpdated || hasTopLevelProps) {
+      const currentProps = existing.properties || {};
+      const dataProps = data.properties || {};
+      let newProps: DocumentProperties = {
+        ...currentProps,
+        ...dataProps,
+        ...topLevelProps,
+        // Extracted values always win (content is source of truth)
+        // Note: 'plan' is the canonical field name (renamed from 'hypothesis' in migration 032)
+        ...(contentUpdated ? {
+          plan: extractedHypothesis,
+          success_criteria: extractedCriteria,
+          vision: extractedVision,
+          goals: extractedGoals,
+        } : {}),
+      };
+
+      // Compute document completeness for projects and sprints
+      if (existing.document_type === 'project' || existing.document_type === 'sprint') {
+        let linkedIssuesCount = 0;
+
+        // For sprints, count linked issues via document_associations
+        if (existing.document_type === 'sprint') {
+          const issueCountResult = await client.query(
+            `SELECT COUNT(*) as count FROM documents d
+             JOIN document_associations da ON da.document_id = d.id
+             WHERE da.related_id = $1 AND da.relationship_type = 'sprint' AND d.document_type = $2`,
+            [id, 'issue']
+          );
+          linkedIssuesCount = parseInt(issueCountResult.rows[0]?.count || '0', 10);
+        }
+
+        const completeness = checkDocumentCompleteness(
+          existing.document_type,
+          newProps,
+          linkedIssuesCount
+        );
+
+        newProps = {
+          ...newProps,
+          is_complete: completeness.isComplete,
+          missing_fields: completeness.missingFields,
+        };
+      }
+
+      updates.push(`properties = $${paramIndex++}`);
+      values.push(JSON.stringify(newProps));
+    }
+    if (data.visibility !== undefined) {
+      updates.push(`visibility = $${paramIndex++}`);
+      values.push(data.visibility);
+    }
+
+    // Handle document_type change
+      if (data.document_type !== undefined && data.document_type !== existing.document_type) {
+      // Only the document creator can change its type
+      if (existing.created_by !== userId) {
+        res.status(403).json({ error: 'Only the document creator can change its type' });
+        return;
+      }
+
+      // Restrict certain type changes (can't change to/from program or person)
+      const restrictedTypes = ['program', 'person'];
+      if (restrictedTypes.includes(String(existing.document_type)) || restrictedTypes.includes(data.document_type)) {
+        res.status(400).json({ error: 'Cannot change to or from program or person document types' });
+        return;
+      }
+
+      updates.push(`document_type = $${paramIndex++}`);
+      values.push(data.document_type);
+
+      // When changing to 'issue', assign a ticket number if not already present
+      if (data.document_type === 'issue' && !existing.ticket_number) {
+        // Use advisory lock to serialize ticket number generation per workspace
+        const workspaceIdHex = workspaceId.replace(/-/g, '').substring(0, 15);
+        const lockKey = parseInt(workspaceIdHex, 16);
+        await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey]);
+
+        // Now safely get next ticket number - we hold the lock until transaction ends
+        const ticketResult = await client.query(
+          `SELECT COALESCE(MAX(ticket_number), 0) + 1 as next_number
+           FROM documents
+           WHERE workspace_id = $1 AND document_type = 'issue'`,
+          [workspaceId]
+        );
+        const ticketNumber = ticketResult.rows[0].next_number;
+        updates.push(`ticket_number = $${paramIndex++}`);
+        values.push(ticketNumber);
+      }
+
+      // When changing from 'issue' to another type, preserve ticket_number for reference
+      // (don't clear it - it serves as a historical reference)
+    }
+
+    // Track if we have association updates (belongs_to, program_id, sprint_id)
+    // program_id and sprint_id are handled via document_associations table, not the updates array
+    const hasBelongsToUpdate = data.belongs_to !== undefined;
+    const hasProgramIdUpdate = data.program_id !== undefined;
+    const hasSprintIdUpdate = data.sprint_id !== undefined;
+
+    if (updates.length === 0 && !hasBelongsToUpdate && !hasProgramIdUpdate && !hasSprintIdUpdate) {
+      res.status(400).json({ error: 'No fields to update' });
+      return;
+    }
+
+    // Handle belongs_to association updates
+    if (hasBelongsToUpdate) {
+      const newBelongsTo = data.belongs_to || [];
+
+      // Get current associations
+      const currentAssocs = await client.query(
+        'SELECT related_id, relationship_type FROM document_associations WHERE document_id = $1',
+        [id]
+      );
+      const currentSet = new Set(currentAssocs.rows.map(r => `${r.relationship_type}:${r.related_id}`));
+      const newSet = new Set(newBelongsTo.map(bt => `${bt.type}:${bt.id}`));
+
+      // Remove associations that are no longer present
+      for (const row of currentAssocs.rows) {
+        const key = `${row.relationship_type}:${row.related_id}`;
+        if (!newSet.has(key)) {
+          await client.query(
+            'DELETE FROM document_associations WHERE document_id = $1 AND related_id = $2 AND relationship_type = $3',
+            [id, row.related_id, row.relationship_type]
+          );
+        }
+      }
+
+      // Add new associations
+      for (const bt of newBelongsTo) {
+        const key = `${bt.type}:${bt.id}`;
+        if (!currentSet.has(key)) {
+          await client.query(
+            'INSERT INTO document_associations (document_id, related_id, relationship_type) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING',
+            [id, bt.id, bt.type]
+          );
+        }
+      }
+    }
+
+    // Handle sprint_id via document_associations (when passed directly, not via belongs_to)
+    if (data.sprint_id !== undefined && !hasBelongsToUpdate) {
+      // Remove existing sprint association
+      await client.query(
+        `DELETE FROM document_associations WHERE document_id = $1 AND relationship_type = 'sprint'`,
+        [id]
+      );
+
+      // Add new sprint association if sprint_id is not null
+      if (data.sprint_id !== null) {
+        // Verify the sprint exists
+        const sprintCheck = await client.query(
+          `SELECT id FROM documents WHERE id = $1 AND workspace_id = $2 AND document_type = 'sprint' AND deleted_at IS NULL`,
+          [data.sprint_id, workspaceId]
+        );
+
+        if (sprintCheck.rows.length > 0) {
+          await client.query(
+            `INSERT INTO document_associations (document_id, related_id, relationship_type) VALUES ($1, $2, 'sprint') ON CONFLICT DO NOTHING`,
+            [id, data.sprint_id]
+          );
+        }
+      }
+    }
+
+    // Handle program_id via document_associations (when passed directly, not via belongs_to)
+    if (data.program_id !== undefined && !hasBelongsToUpdate) {
+      // Remove existing program association
+      await client.query(
+        `DELETE FROM document_associations WHERE document_id = $1 AND relationship_type = 'program'`,
+        [id]
+      );
+
+      // Add new program association if program_id is not null
+      if (data.program_id !== null) {
+        // Verify the program exists
+        const programCheck = await client.query(
+          `SELECT id FROM documents WHERE id = $1 AND workspace_id = $2 AND document_type = 'program' AND deleted_at IS NULL`,
+          [data.program_id, workspaceId]
+        );
+
+        if (programCheck.rows.length > 0) {
+          await client.query(
+            `INSERT INTO document_associations (document_id, related_id, relationship_type) VALUES ($1, $2, 'program') ON CONFLICT DO NOTHING`,
+            [id, data.program_id]
+          );
+        }
+      }
+    }
+
+    // If we only had belongs_to updates, still update the timestamp
+    if (updates.length === 0) {
+      updates.push(`updated_at = now()`);
+    } else {
+      updates.push(`updated_at = now()`);
+    }
+
+    const result = await client.query(
+      `UPDATE documents SET ${updates.join(', ')} WHERE id = $${paramIndex} AND workspace_id = $${paramIndex + 1} RETURNING *`,
+      [...values, id, workspaceId]
+    );
+
+    // When a weekly plan/retro is edited after changes were requested, move it back to re-review.
+    if (contentUpdated && (existing.document_type === 'weekly_plan' || existing.document_type === 'weekly_retro')) {
+      const docProps = (existing.properties || {}) as Record<string, unknown>;
+      const personId = typeof docProps.person_id === 'string' ? docProps.person_id : null;
+      const projectId = typeof docProps.project_id === 'string' ? docProps.project_id : null;
+      const rawWeekNumber = docProps.week_number;
+      const weekNumber = typeof rawWeekNumber === 'number'
+        ? rawWeekNumber
+        : typeof rawWeekNumber === 'string'
+          ? Number.parseInt(rawWeekNumber, 10)
+          : NaN;
+
+      if (personId && projectId && Number.isFinite(weekNumber)) {
+        const sprintResult = await client.query(
+          `SELECT id, properties
+           FROM documents
+           WHERE workspace_id = $1
+             AND document_type = 'sprint'
+             AND deleted_at IS NULL
+             AND (properties->>'project_id') = $2
+             AND (properties->>'sprint_number')::int = $3
+             AND (
+               properties->>'owner_id' = $4
+               OR EXISTS (
+                 SELECT 1
+                 FROM jsonb_array_elements_text(COALESCE(properties->'assignee_ids', '[]'::jsonb)) AS assignee_id
+                 WHERE assignee_id = $4
+               )
+             )
+           ORDER BY updated_at DESC
+           LIMIT 1`,
+          [workspaceId, projectId, weekNumber, personId]
+        );
+
+        if (sprintResult.rows.length > 0) {
+          const sprint = sprintResult.rows[0];
+          const sprintProps = (sprint.properties || {}) as Record<string, unknown>;
+          const approvalKey = existing.document_type === 'weekly_plan' ? 'plan_approval' : 'review_approval';
+          const approval = sprintProps[approvalKey] as { state?: string; approved_by?: string | null } | undefined;
+
+          if (approval?.state === 'changes_requested') {
+            const nextProps = {
+              ...sprintProps,
+              [approvalKey]: {
+                ...approval,
+                state: 'changed_since_approved',
+              },
+            };
+
+            await client.query(
+              `UPDATE documents SET properties = $1, updated_at = now()
+               WHERE id = $2 AND document_type = 'sprint'`,
+              [JSON.stringify(nextProps), sprint.id]
+            );
+
+            resubmissionTarget = {
+              sprintId: String(sprint.id),
+              reviewerUserId: typeof approval.approved_by === 'string' ? approval.approved_by : null,
+            };
+          }
+        }
+      }
+    }
+
+    // Cascade visibility changes to child documents
+    if (data.visibility !== undefined && data.visibility !== existing.visibility) {
+      await client.query(
+        `WITH RECURSIVE descendants AS (
+          SELECT id FROM documents WHERE parent_id = $1
+          UNION ALL
+          SELECT d.id FROM documents d
+          INNER JOIN descendants descendant ON d.parent_id = descendant.id
+        )
+        UPDATE documents SET visibility = $2, updated_at = now()
+        WHERE id IN (SELECT id FROM descendants)`,
+        [id, data.visibility]
+      );
+    }
+
+    await client.query('COMMIT');
+
+    // Post-commit operations (non-transactional)
+
+    // Invalidate collaboration cache when content is updated via API
+    if (contentUpdated) {
+      invalidateDocumentCache(id);
+    }
+
+    // Notify WebSocket collaboration server to disconnect users who lost access
+    if (data.visibility !== undefined && data.visibility !== existing.visibility) {
+      handleVisibilityChange(id, data.visibility, String(existing.created_by)).catch((err) => {
+        console.error('Failed to handle visibility change for collaboration:', err);
+      });
+    }
+
+    if (resubmissionTarget) {
+      // Refresh action items for the document owner and reviewer after resubmission.
+      broadcastToUser(userId, 'accountability:updated', {
+        type: existing.document_type,
+        targetId: resubmissionTarget.sprintId,
+      });
+      if (resubmissionTarget.reviewerUserId && resubmissionTarget.reviewerUserId !== userId) {
+        broadcastToUser(resubmissionTarget.reviewerUserId, 'accountability:updated', {
+          type: existing.document_type,
+          targetId: resubmissionTarget.sprintId,
+        });
+      }
+    }
+
+    // Flatten properties for backwards compatibility (match GET endpoint format)
+    const updatedDoc = result.rows[0];
+    const props = updatedDoc.properties || {};
+
+    // Get owner details for projects (owner_id is a user_id, lookup person document by user_id)
+    // Return user_id as id so PersonCombobox can match correctly
+    let owner: { id: string; name: string; email: string } | null = null;
+    if (updatedDoc.document_type === 'project' && props.owner_id) {
+      const ownerResult = await pool.query(
+        `SELECT (d.properties->>'user_id')::text as id, d.title as name, COALESCE(d.properties->>'email', u.email) as email
+         FROM documents d
+         LEFT JOIN users u ON u.id = (d.properties->>'user_id')::uuid
+         WHERE (d.properties->>'user_id')::uuid = $1 AND d.workspace_id = $2 AND d.document_type = 'person'`,
+        [props.owner_id, workspaceId]
+      );
+      if (ownerResult.rows.length > 0) {
+        owner = ownerResult.rows[0];
+      }
+    }
+
+    res.json({
+      ...updatedDoc,
+      // Issue properties
+      state: props.state,
+      priority: props.priority,
+      estimate: props.estimate,
+      assignee_id: props.assignee_id,
+      source: props.source,
+      // Project properties
+      impact: props.impact,
+      confidence: props.confidence,
+      ease: props.ease,
+      owner_id: props.owner_id,
+      owner,
+      // Generic properties
+      prefix: props.prefix,
+      color: props.color,
+      // Sprint properties (dates computed from sprint_number + workspace.sprint_start_date)
+      status: props.status,
+      plan: props.plan,
+      plan_approval: props.plan_approval,
+      review_approval: props.review_approval,
+      review_rating: props.review_rating,
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error('Update document error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
+  }
+});
+
+// Delete document
+router.delete('/:id', authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const userId = String(req.userId);
+    const workspaceId = String(req.workspaceId);
+
+    // Check if user can access the document
+    const { canAccess, doc } = await canAccessDocument(id, userId, workspaceId);
+
+    if (!doc) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    if (!canAccess) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    const result = await pool.query(
+      'DELETE FROM documents WHERE id = $1 AND workspace_id = $2 RETURNING id',
+      [id, workspaceId]
+    );
+
+    if (result.rows.length === 0) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    res.status(204).send();
+  } catch (err) {
+    console.error('Delete document error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  }
+});
+
+// Convert document type (issue <-> project)
+// Uses in-place conversion with snapshots: same ID, state preserved for undo
+const convertDocumentSchema = z.object({
+  target_type: z.enum(['issue', 'project']),
+});
+
+router.post('/:id/convert', authMiddleware, async (req: Request, res: Response) => {
+  const client = await pool.connect();
+  try {
+    const id = String(req.params.id);
+    const userId = String(req.userId);
+    const workspaceId = String(req.workspaceId);
+
+    const parsed = convertDocumentSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: 'Invalid input', details: parsed.error.errors });
+      return;
+    }
+
+    const { target_type } = parsed.data;
+
+    // Check if user can access the document
+    const { canAccess, doc } = await canAccessDocument(id, userId, workspaceId);
+
+    if (!doc) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    if (!canAccess) {
+      res.status(404).json({ error: 'Document not found' });
+      return;
+    }
+
+    // Only the document creator can convert it (significant structural change)
+    if (doc.created_by !== userId) {
+      res.status(403).json({ error: 'Only the document creator can convert it' });
+      return;
+    }
+
+    // Validate conversion is between issue and project only
+    if (doc.document_type !== 'issue' && doc.document_type !== 'project') {
+      res.status(400).json({ error: 'Only issues and projects can be converted' });
+      return;
+    }
+
+    // Validate not converting to same type
+    if (doc.document_type === target_type) {
+      res.status(400).json({ error: `Document is already a ${target_type}` });
+      return;
+    }
+
+    // Check if document is archived
+    if (doc.archived_at) {
+      res.status(400).json({ error: 'Cannot convert an archived document' });
+      return;
+    }
+
+    await client.query('BEGIN');
+
+    const currentProps = (doc.properties || {}) as DocumentProperties;
+    const sourceType = doc.document_type;
+
+    // 1. Create snapshot of current state for undo capability
+    await client.query(
+      `INSERT INTO document_snapshots (
+        document_id, document_type, title, properties, ticket_number,
+        snapshot_reason, created_by
+      )
+      VALUES ($1, $2, $3, $4, $5, 'conversion', $6)`,
+      [
+        id,
+        sourceType,
+        doc.title,
+        JSON.stringify(currentProps),
+        doc.ticket_number,
+        userId,
+      ]
+    );
+
+    // 2. Prepare new properties based on target type
+    let newProperties: Record<string, unknown>;
+    let newTicketNumber: number | null = null;
+
+    if (target_type === 'project') {
+      // Issue -> Project: set project defaults, preserve program_id
+      newProperties = {
+        impact: 3,
+        confidence: 3,
+        ease: 3,
+        color: '#6366f1',
+        owner_id: userId,
+        program_id: currentProps.program_id || null,
+        // Track original ticket number for reference
+        promoted_from_ticket: doc.ticket_number,
+      };
+      // Clear ticket_number for projects
+      newTicketNumber = null;
+    } else {
+      // Project -> Issue: set issue defaults, preserve program_id
+      // Need fresh ticket number with advisory lock
+      const workspaceIdHex = workspaceId.replace(/-/g, '').substring(0, 15);
+      const lockKey = parseInt(workspaceIdHex, 16);
+      await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey]);
+
+      const ticketResult = await client.query(
+        `SELECT COALESCE(MAX(ticket_number), 0) + 1 as next_number
+         FROM documents
+         WHERE workspace_id = $1 AND document_type = 'issue'`,
+        [workspaceId]
+      );
+      newTicketNumber = ticketResult.rows[0].next_number;
+
+      newProperties = {
+        state: 'backlog',
+        priority: 'medium',
+        source: 'internal',
+        assignee_id: null,
+        rejection_reason: null,
+        program_id: currentProps.program_id || null,
+        // Track conversion from project
+        demoted_from_project: true,
+      };
+
+      // Remove 'project' associations from child issues pointing to this document
+      // (They become orphaned - their parent project is being converted to an issue)
+      await client.query(
+        `DELETE FROM document_associations
+         WHERE related_id = $1 AND relationship_type = 'project'`,
+        [id]
+      );
+    }
+
+    // 3. Update document in-place with new type and properties
+    const updateResult = await client.query(
+      `UPDATE documents
+       SET document_type = $1,
+           properties = $2,
+           ticket_number = $3,
+           original_type = COALESCE(original_type, $4),
+           conversion_count = COALESCE(conversion_count, 0) + 1,
+           converted_from_id = $5,
+           converted_at = NOW(),
+           converted_by = $6,
+           updated_at = NOW()
+       WHERE id = $7 AND workspace_id = $8
+       RETURNING *`,
+      [
+        target_type,
+        JSON.stringify(newProperties),
+        newTicketNumber,
+        sourceType, // Set original_type only if not already set
+        id, // converted_from_id points to self (for tracking conversion happened)
+        userId,
+        id,
+        workspaceId,
+      ]
+    );
+
+    const updatedDoc = updateResult.rows[0];
+
+    // 4. Update associations - remove invalid ones for new type
+    // Issues can have: parent, project, sprint, program
+    // Projects can only have: program
+    if (target_type === 'project') {
+      // Remove non-program associations (project can only have program)
+      await client.query(
+        `DELETE FROM document_associations
+         WHERE document_id = $1 AND relationship_type != 'program'`,
+        [id]
+      );
+    }
+    // If converting to issue, keep all associations (issues support more types)
+
+    await client.query('COMMIT');
+
+    // Return the updated document (same ID!)
+    const props = updatedDoc.properties || {};
+    res.status(200).json({
+      ...updatedDoc,
+      // Flatten properties for frontend
+      ...(target_type === 'issue' && {
+        state: props.state,
+        priority: props.priority,
+        assignee_id: props.assignee_id,
+        source: props.source,
+      }),
+      ...(target_type === 'project' && {
+        impact: props.impact,
+        confidence: props.confidence,
+        ease: props.ease,
+        color: props.color,
+        owner_id: props.owner_id,
+      }),
+      program_id: props.program_id,
+      converted_from_type: sourceType,
+    });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Convert document error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
+  }
+});
+
+// POST /documents/:id/undo-conversion - Undo a document conversion using snapshots
+router.post('/:id/undo-conversion', authMiddleware, async (req: Request, res: Response) => {
+  const id = String(req.params.id);
+  const userId = String(req.userId);
+  const workspaceId = String(req.workspaceId);
+
+  // First check access using canAccessDocument (outside transaction for read)
+  const { canAccess, doc: currentDoc } = await canAccessDocument(id, userId, workspaceId);
+
+  if (!currentDoc) {
+    res.status(404).json({ error: 'Document not found' });
+    return;
+  }
+
+  if (!canAccess) {
+    res.status(404).json({ error: 'Document not found' });
+    return;
+  }
+
+  // Only the creator or the person who converted it can undo
+  const isCreator = currentDoc.created_by === userId;
+  const isConverter = currentDoc.converted_by === userId;
+  if (!isCreator && !isConverter) {
+    res.status(403).json({ error: 'Only the document creator or converter can undo conversion' });
+    return;
+  }
+
+  const client = await pool.connect();
+
+  try {
+    await client.query('BEGIN');
+
+    // Get the most recent snapshot for this document
+    const snapshotResult = await client.query(
+      `SELECT * FROM document_snapshots
+       WHERE document_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [id]
+    );
+
+    if (snapshotResult.rows.length === 0) {
+      await client.query('ROLLBACK');
+      res.status(400).json({ error: 'No conversion history found for this document' });
+      return;
+    }
+
+    const snapshot = snapshotResult.rows[0];
+    const currentProps = (currentDoc.properties || {}) as DocumentProperties;
+    const restoredType = snapshot.document_type;
+
+    // 1. Create snapshot of current state (so user can re-convert if needed)
+    await client.query(
+      `INSERT INTO document_snapshots (
+        document_id, document_type, title, properties, ticket_number,
+        snapshot_reason, created_by
+      )
+      VALUES ($1, $2, $3, $4, $5, 'undo', $6)`,
+      [
+        id,
+        currentDoc.document_type,
+        currentDoc.title,
+        JSON.stringify(currentProps),
+        currentDoc.ticket_number,
+        userId,
+      ]
+    );
+
+    // 2. Restore document from snapshot
+    const snapshotProps = snapshot.properties || {};
+
+    // Handle ticket number restoration
+    let restoredTicketNumber = snapshot.ticket_number;
+
+    // If restoring to an issue and we don't have a ticket number, generate one
+    if (restoredType === 'issue' && !restoredTicketNumber) {
+      const workspaceIdHex = workspaceId.replace(/-/g, '').substring(0, 15);
+      const lockKey = parseInt(workspaceIdHex, 16);
+      await client.query('SELECT pg_advisory_xact_lock($1)', [lockKey]);
+
+      const ticketResult = await client.query(
+        `SELECT COALESCE(MAX(ticket_number), 0) + 1 as next_number
+         FROM documents
+         WHERE workspace_id = $1 AND document_type = 'issue'`,
+        [workspaceId]
+      );
+      restoredTicketNumber = ticketResult.rows[0].next_number;
+    }
+
+    // If restoring to a project, clear ticket number
+    if (restoredType === 'project') {
+      restoredTicketNumber = null;
+    }
+
+    const updateResult = await client.query(
+      `UPDATE documents
+       SET document_type = $1,
+           properties = $2,
+           ticket_number = $3,
+           converted_at = NOW(),
+           converted_by = $4,
+           updated_at = NOW()
+       WHERE id = $5 AND workspace_id = $6
+       RETURNING *`,
+      [
+        restoredType,
+        JSON.stringify(snapshotProps),
+        restoredTicketNumber,
+        userId,
+        id,
+        workspaceId,
+      ]
+    );
+
+    const restoredDoc = updateResult.rows[0];
+
+    // 3. Delete the snapshot we just restored from (keep the undo snapshot)
+    await client.query(
+      `DELETE FROM document_snapshots WHERE id = $1`,
+      [snapshot.id]
+    );
+
+    // 4. Update associations based on restored type
+    if (restoredType === 'project') {
+      // Remove non-program associations (project can only have program)
+      await client.query(
+        `DELETE FROM document_associations
+         WHERE document_id = $1 AND relationship_type != 'program'`,
+        [id]
+      );
+    }
+    // If restoring to issue, keep all associations
+
+    await client.query('COMMIT');
+
+    // Return the restored document (same ID!)
+    const props = restoredDoc.properties || {};
+    res.status(200).json({
+      ...restoredDoc,
+      // Flatten properties for frontend
+      ...(restoredType === 'issue' && {
+        state: props.state,
+        priority: props.priority,
+        assignee_id: props.assignee_id,
+        source: props.source,
+      }),
+      ...(restoredType === 'project' && {
+        impact: props.impact,
+        confidence: props.confidence,
+        ease: props.ease,
+        color: props.color,
+        owner_id: props.owner_id,
+      }),
+      program_id: props.program_id,
+      restored_from_type: currentDoc.document_type,
+      message: `Conversion undone. Document restored to ${restoredType}.`,
+    });
+
+  } catch (err) {
+    await client.query('ROLLBACK');
+    console.error('Undo conversion error:', err);
+    res.status(500).json({ error: 'Internal server error' });
+  } finally {
+    client.release();
+  }
+});
+
+export default router;
+
+// Type augmentation for Express Request
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Express {
+    interface Request {
+      user?: {
+        id: string;
+        email: string;
+        name: string;
+        workspaceId: string;
+      };
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "audit_unit": "U2",
+  "captured_at": "2026-05-19",
+  "tool": "pnpm lint",
+  "configured": false,
+  "result": "No lint script in any workspace (root, web, api, shared)",
+  "raw_output": "Scope: 3 of 4 workspace projects\nNone of the selected packages has a 'lint' script",
+  "interpretation": "ESLint is not configured in the Ship codebase. Code quality enforcement is via tsc --strict only. See ORIENTATION.md finding #12 and §3.1 weakest point #4 (added).",
+  "audit_implications": [
+    "U2 baseline: ESLint violation count is N/A (not configured), not 0",
+    "AUDIT.md Category 1 Type Safety should note ESLint absence as a quality finding",
+    "Optional improvement: add ESLint config with @typescript-eslint/recommended, react-hooks, jsx-a11y for Category 7 a11y enforcement"
+  ]
+}

@@ -1,0 +1,111 @@
+{
+  "captured_at": "2026-05-19T22:21:56.070Z",
+  "tool": "@axe-core/playwright",
+  "pages_scanned": 4,
+  "summary": [
+    {
+      "page": "login",
+      "url": "http://localhost:5173/docs",
+      "violations_total": 0,
+      "by_severity": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "violations": [],
+      "passes_count": 29,
+      "incomplete_count": 2
+    },
+    {
+      "page": "docs",
+      "url": "http://localhost:5173/docs",
+      "violations_total": 0,
+      "by_severity": {
+        "critical": 0,
+        "serious": 0,
+        "moderate": 0,
+        "minor": 0
+      },
+      "violations": [],
+      "passes_count": 35,
+      "incomplete_count": 2
+    },
+    {
+      "page": "projects",
+      "url": "http://localhost:5173/projects",
+      "violations_total": 1,
+      "by_severity": {
+        "critical": 0,
+        "serious": 1,
+        "moderate": 0,
+        "minor": 0
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "help": "Elements must meet minimum color contrast ratio thresholds",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/color-contrast?application=playwright",
+          "tags": [
+            "cat.color",
+            "wcag2aa",
+            "wcag143",
+            "TTv5",
+            "TT13.c",
+            "EN-301-549",
+            "EN-9.1.4.3",
+            "ACT",
+            "RGAAv4",
+            "RGAA-3.2.1"
+          ],
+          "node_count": 12,
+          "sample_target": [
+            "#filter-planned > .bg-muted\\/30.ml-1.px-1\\.5"
+          ],
+          "sample_html": "<span class=\"ml-1 rounded-full px-1.5 py-0.5 text-xs font-medium bg-muted/30 text-muted\">10</span>"
+        }
+      ],
+      "passes_count": 33,
+      "incomplete_count": 2
+    },
+    {
+      "page": "team",
+      "url": "http://localhost:5173/team/allocation",
+      "violations_total": 1,
+      "by_severity": {
+        "critical": 0,
+        "serious": 1,
+        "moderate": 0,
+        "minor": 0
+      },
+      "violations": [
+        {
+          "id": "color-contrast",
+          "impact": "serious",
+          "help": "Elements must meet minimum color contrast ratio thresholds",
+          "helpUrl": "https://dequeuniversity.com/rules/axe/4.11/color-contrast?application=playwright",
+          "tags": [
+            "cat.color",
+            "wcag2aa",
+            "wcag143",
+            "TTv5",
+            "TT13.c",
+            "EN-301-549",
+            "EN-9.1.4.3",
+            "ACT",
+            "RGAAv4",
+            "RGAA-3.2.1"
+          ],
+          "node_count": 1,
+          "sample_target": [
+            ".text-accent.font-medium.text-xs"
+          ],
+          "sample_html": "<span class=\"text-xs font-medium text-accent\">Week 14</span>"
+        }
+      ],
+      "passes_count": 29,
+      "incomplete_count": 2
+    }
+  ]
+}

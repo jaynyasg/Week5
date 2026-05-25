@@ -1,0 +1,203 @@
+{
+  "audit_unit": "U2",
+  "captured_at": "2026-05-19",
+  "tool": "ripgrep + tsc --strict --noEmit + pnpm lint",
+  "methodology": "Grep counts via Claude Grep tool against ship/web/src, ship/api/src, ship/shared/src. tsc verified via 'pnpm type-check' which runs --noEmit across all 3 workspaces. ESLint configuration checked via 'pnpm lint' (none configured).",
+  "strict_mode": {
+    "enabled": true,
+    "config_flags": [
+      "strict: true",
+      "noUncheckedIndexedAccess: true",
+      "noImplicitReturns: true",
+      "noFallthroughCasesInSwitch: true",
+      "forceConsistentCasingInFileNames: true",
+      "isolatedModules: true"
+    ],
+    "tsc_noemit_result": "pass",
+    "tsc_noemit_strict_errors": 0,
+    "note": "tsc --noEmit passes cleanly on shared/, web/, and api/. The plan's strict-mode-explosion contingency does not apply — strict is already enforced. Type safety violations come only from explicit any/as/!/ts-ignore patterns."
+  },
+  "violations": {
+    "explicit_any_type_annotation": {
+      "pattern": ": any\\b",
+      "total": 99,
+      "by_package": {
+        "web/src": 24,
+        "api/src": 75,
+        "shared/src": 0
+      },
+      "files_affected": {
+        "web/src": 5,
+        "api/src": 17,
+        "shared/src": 0
+      }
+    },
+    "any_usage_broad": {
+      "pattern": "\\bany\\b",
+      "note": "Catches all forms — explicit annotations, <any>, any[], Record<string, any>, function params, etc.",
+      "total": 337,
+      "by_package": {
+        "web/src": 65,
+        "api/src": 272,
+        "shared/src": 0
+      },
+      "files_affected": {
+        "web/src": 25,
+        "api/src": 37,
+        "shared/src": 0
+      }
+    },
+    "type_assertions_as": {
+      "pattern": " as [A-Z]",
+      "note": "Counts ' as TypeName' assertions where target is a capitalized type. Excludes ' as const' and lowercased keywords.",
+      "total": 275,
+      "by_package": {
+        "web/src": 210,
+        "api/src": 65,
+        "shared/src": 0
+      },
+      "files_affected": {
+        "web/src": 78,
+        "api/src": 29,
+        "shared/src": 0
+      }
+    },
+    "non_null_assertions": {
+      "pattern": "!\\.",
+      "note": "Counts '!.\\w' (non-null assertion before property access). Does NOT count '!' negation operator.",
+      "total": 24,
+      "by_package": {
+        "web/src": 17,
+        "api/src": 7,
+        "shared/src": 0
+      },
+      "files_affected": {
+        "web/src": 9,
+        "api/src": 5,
+        "shared/src": 0
+      }
+    },
+    "ts_ignore_directives": {
+      "pattern": "@ts-(ignore|expect-error)",
+      "total": 1,
+      "by_package": {
+        "web/src": 1,
+        "api/src": 0,
+        "shared/src": 0
+      },
+      "files_affected": {
+        "web/src": 1,
+        "api/src": 0,
+        "shared/src": 0
+      },
+      "note": "Only 1 occurrence across the entire codebase (web/src/components/icons/uswds/Icon.test.tsx). Exceptionally clean."
+    }
+  },
+  "total_grep_violations": {
+    "conservative": {
+      "value": 399,
+      "formula": "explicit_any_type_annotation (99) + type_assertions_as (275) + non_null_assertions (24) + ts_ignore_directives (1)",
+      "note": "Uses : any (explicit annotation) only. Used as primary baseline."
+    },
+    "broad": {
+      "value": 637,
+      "formula": "any_usage_broad (337) + type_assertions_as (275) + non_null_assertions (24) + ts_ignore_directives (1)",
+      "note": "Uses \\bany\\b (catches all any forms). Higher count includes <any>, any[], Record<string, any>, etc."
+    }
+  },
+  "improvement_target": {
+    "pdf_requirement": "Eliminate 25% of type safety violations",
+    "conservative_target": {
+      "baseline": 399,
+      "fix_at_least": 100,
+      "remaining_after_target": 299
+    },
+    "broad_target": {
+      "baseline": 637,
+      "fix_at_least": 160,
+      "remaining_after_target": 477
+    }
+  },
+  "top_violation_dense_files_production_code": [
+    {
+      "file": "web/src/components/UnifiedEditor.tsx",
+      "any_count": 25,
+      "as_count": 25,
+      "estimated_total": 50,
+      "note": "The single largest type-safety hotspot. Likely high-leverage target for U11."
+    },
+    {
+      "file": "api/src/routes/projects.ts",
+      "any_count": 17,
+      "as_count": 13,
+      "estimated_total": 30,
+      "note": "Route handler with high type debt."
+    },
+    {
+      "file": "api/src/utils/yjsConverter.ts",
+      "any_count": 14,
+      "as_count": 12,
+      "estimated_total": 26,
+      "note": "Yjs binary conversion helpers — type erasure is common here."
+    },
+    {
+      "file": "api/src/routes/weeks.ts",
+      "any_count": 10,
+      "as_count": 10,
+      "estimated_total": 20,
+      "note": "Heavy route handler — week documents are complex."
+    },
+    {
+      "file": "web/src/components/sidebars/PropertiesPanel.tsx",
+      "as_count": 13,
+      "estimated_total": 13,
+      "note": "Dynamic property rendering — common any/as source."
+    }
+  ],
+  "top_violation_dense_files_test_code": [
+    {
+      "file": "api/src/__tests__/transformIssueLinks.test.ts",
+      "as_count": 37,
+      "note": "Test file. Many as assertions are legitimate (mock typing). Lower priority for fixing."
+    },
+    {
+      "file": "api/src/services/accountability.test.ts",
+      "as_count": 33,
+      "note": "Test file."
+    },
+    {
+      "file": "api/src/__tests__/auth.test.ts",
+      "any_count": 24,
+      "note": "Test file."
+    }
+  ],
+  "type_coverage": {
+    "tool": "type-coverage --detail",
+    "percentage": 93.47,
+    "covered_identifiers": 165335,
+    "total_identifiers": 176882,
+    "uncovered_identifiers": 11547,
+    "captured_at": "2026-05-19",
+    "interpretation": "93.47% of identifiers have a non-any type. The remaining 6.53% (11,547 identifiers) is primarily implicit any from type inference — far more than the ~400 explicit grep violations. This is a strong baseline; comparable codebases of this size often sit in 75-88%.",
+    "stretch_target": "94.00%+ after improvements (~1000 identifiers shifted from any to a real type)"
+  },
+  "eslint": {
+    "configured": false,
+    "lint_script_present": false,
+    "note": "No ESLint configuration in the Ship codebase. See eslint-baseline.json for full details."
+  },
+  "circular_dependencies": {
+    "tool": "madge",
+    "result": "none",
+    "files_scanned": 82,
+    "note": "Strong architectural signal. See madge-circular-baseline.txt."
+  },
+  "audit_implications": [
+    "Strict mode is already aggressively enforced — there is no 'turn strict on' lever for the 25% improvement target.",
+    "Improvement strategy should target the top 5 production-code violation-dense files first for highest ROI.",
+    "Test files account for a substantial portion of `as` assertions; these are usually legitimate test idioms and lower priority.",
+    "Total target of ~100 violations fixed (conservative count) is achievable by addressing 2-3 of the top files.",
+    "ESLint addition would catch additional quality issues beyond TypeScript's reach and is a recommended improvement (not part of PDF target).",
+    "Type-coverage percentage metric still pending — to be filled in once 'pnpm dlx type-coverage --detail' runs."
+  ]
+}

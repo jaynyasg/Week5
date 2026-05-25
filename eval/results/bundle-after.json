@@ -1,0 +1,48 @@
+{
+  "captured_at": "2026-05-20",
+  "unit": "U12",
+  "command": "pnpm build:web",
+  "baseline_main_chunk_kb": 2073.7,
+  "after_main_chunk_kb": 287.36,
+  "after_main_chunk_gzip_kb": 89.99,
+  "reduction_kb": 1786.34,
+  "reduction_percent": 86.14,
+  "meets_pdf_initial_load_target_20_percent": true,
+  "entry_script": "index-DNGLRLDB.js",
+  "note": "Main entry script from web/dist/index.html after lazy-loading route pages and AppLayout. Heavy app/editor/page code is deferred into async route chunks.",
+  "deferred_chunks": {
+    "App-ClkILDQ1.js": {
+      "size_kb": 86.33,
+      "gzip_kb": 18.96
+    },
+    "UnifiedDocumentPage-CMJnMfpS.js": {
+      "size_kb": 395.34,
+      "gzip_kb": 97.74
+    },
+    "PropertyRow-D15WAC5T.js": {
+      "size_kb": 816.53,
+      "gzip_kb": 255.51
+    },
+    "Login-DqLOaDIx.js": {
+      "size_kb": 50.79,
+      "gzip_kb": 10.35
+    },
+    "IssuesList-B0XdFHuK.js": {
+      "size_kb": 52.9,
+      "gzip_kb": 15.51
+    },
+    "ReviewsPage-CasZWJQh.js": {
+      "size_kb": 27.73,
+      "gzip_kb": 7.05
+    },
+    "TeamMode-CmpsVuN9.js": {
+      "size_kb": 21.33,
+      "gzip_kb": 6.41
+    },
+    "WorkspaceSettings-BoGX08GS.js": {
+      "size_kb": 17.1,
+      "gzip_kb": 4.28
+    }
+  },
+  "mixed_import_warnings": "Resolved — SlashCommands uses static imports for upload.ts and FileAttachment.tsx"
+}

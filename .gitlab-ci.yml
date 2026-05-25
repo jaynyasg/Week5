@@ -1,0 +1,58 @@
+stages:
+  - quality
+  - build
+  - security
+
+.default_node_pnpm:
+  image: node:22-bookworm
+  before_script:
+    - corepack enable
+    - corepack prepare pnpm@10.27.0 --activate
+    - pnpm install --frozen-lockfile --ignore-scripts
+
+.default_ci_rules:
+  rules:
+    - if: '$CI_PIPELINE_SOURCE == "schedule"'
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - when: never
+
+lint:
+  extends:
+    - .default_node_pnpm
+    - .default_ci_rules
+  stage: quality
+  script:
+    - pnpm lint
+
+type_check:
+  extends:
+    - .default_node_pnpm
+    - .default_ci_rules
+  stage: quality
+  script:
+    - pnpm type-check
+
+build_api:
+  extends:
+    - .default_node_pnpm
+    - .default_ci_rules
+  stage: build
+  script:
+    - pnpm build:api
+
+build_web:
+  extends:
+    - .default_node_pnpm
+    - .default_ci_rules
+  stage: build
+  script:
+    - pnpm build:web
+
+dependency_audit:
+  extends:
+    - .default_node_pnpm
+    - .default_ci_rules
+  stage: security
+  script:
+    - pnpm audit:ci

@@ -1,0 +1,35 @@
+# =============================================================================
+# OPTIONAL: Docker-based PostgreSQL for local development
+# =============================================================================
+# This file is NOT required. Most developers use native PostgreSQL instead.
+# See CLAUDE.md for the recommended setup using local PostgreSQL.
+#
+# The credentials below are LOCAL DEV DEFAULTS ONLY - not real secrets.
+# They are intentionally simple for ease of local development.
+# Production secrets are managed via AWS Secrets Manager and .env.local.
+#
+# To use this instead of native PostgreSQL:
+#   docker-compose up -d
+# =============================================================================
+
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: ship_dev
+      POSTGRES_USER: ship
+      POSTGRES_PASSWORD: ship_dev_password
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ship -d ship_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres_data:

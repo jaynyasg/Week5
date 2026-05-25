@@ -1,0 +1,55 @@
+{
+  "cases": [
+    {
+      "id": "security-audit-attack-surfaces",
+      "question": "According to Shipshape - Security Audit.pdf, what four attack surfaces must the security probe actively test?",
+      "expectedCitationTitles": [
+        "Shipshape - Security Audit.pdf"
+      ],
+      "requiredAnswerTerms": [
+        "authentication and session handling",
+        "websocket message validation",
+        "input sanitization",
+        "dependency vulnerabilities"
+      ],
+      "requiredCitationExcerptTerms": [
+        "authentication and session handling",
+        "websocket message validation",
+        "input sanitization",
+        "dependency vulnerabilities"
+      ]
+    }
+  ],
+  "responses": {
+    "security-audit-attack-surfaces": {
+      "status": "answered",
+      "message": {
+        "id": "sample-message",
+        "role": "assistant",
+        "content": "The four attack surfaces are authentication and session handling, WebSocket message validation, input sanitization, and dependency vulnerabilities [S1].",
+        "createdAt": "2026-05-24T00:00:00.000Z"
+      },
+      "citations": [
+        {
+          "id": "S1",
+          "sourceType": "file",
+          "sourceId": "00000000-0000-0000-0000-000000000001",
+          "title": "Shipshape - Security Audit.pdf",
+          "url": "/documents/00000000-0000-0000-0000-000000000002",
+          "excerpt": "The security probe tool must actively test the live application across at least four attack surfaces: Authentication and session handling, WebSocket message validation, Input sanitization, and Dependency vulnerabilities."
+        }
+      ],
+      "sourceCounts": {
+        "documents": 0,
+        "projects": 0,
+        "programs": 0,
+        "issues": 0,
+        "weeks": 0,
+        "timeline": 0,
+        "files": 1,
+        "total": 1
+      },
+      "traceId": "sample-trace"
+    }
+  }
+}

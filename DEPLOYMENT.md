@@ -1,0 +1,487 @@
+# Ship - Deployment Guide
+
+**AWS deployment reference for Express API + React frontend**
+
+## Current Submission Deployment Decision
+
+For the public submission deployment, Ship is moving to Render instead of applying the full AWS Terraform stack. The AWS plan was reviewed and estimated at roughly `$220-$300/month` for a low-traffic always-on deployment, with about `$250/month` as the working budget estimate.
+
+Earlier deployment notes listed lower AWS estimates of `~$80/month` and `~$113/month`. Those estimates are now out of date: they described narrower dev-style stacks and did not include the full corrected Terraform plan's Kinesis real-time logging, WAF Bot Control, public IPv4, and CloudWatch/VPC flow-log costs.
+
+The main fixed-cost drivers were CloudFront real-time logging through a 4-shard Kinesis stream with 180-day retention, Aurora Serverless v2, NAT Gateway, ALB, Elastic Beanstalk EC2, WAF Bot Control, public IPv4 charges, and CloudWatch/VPC flow logs.
+
+See `DEPLOYMENT_DECISION.md` for the full cost finding and rationale. This AWS guide remains a reference path for later government/compliance deployment work.
+
+## Render Deployment - Public Submission
+
+The public submission target is Render. The repo now includes `render.yaml`, which defines:
+
+- One Render web service named `ship`
+- One managed Render PostgreSQL database named `ship-db`
+- A build that installs workspace dependencies, builds `shared`, `api`, and `web`, then publishes the Vite static build through the Express service
+- A start command that runs database migrations before starting the API/WebSocket server
+
+Although the frontend is still a static React/Vite build, the Render deployment serves it from the same Express origin instead of a separate Static Site service. This keeps Ship's session cookies and authenticated WebSocket collaboration on the same origin as `/api`, `/events`, and `/collaboration/*`.
+
+### Render Setup
+
+1. In Render, create a new Blueprint from this repository and branch `main`.
+2. Review the generated resources from `render.yaml`:
+   - Web service: `ship`
+   - Database: `ship-db`
+3. Let Render create `SESSION_SECRET` and inject `DATABASE_URL` from the managed database.
+4. Add `OPENAI_API_KEY` to the `ship` web service if Ask Ship should be available in the deployed app.
+5. Deploy the Blueprint.
+
+The web service should use Render's default `PORT` environment variable. Render also provides `RENDER_EXTERNAL_URL`; the API uses that value for same-origin production defaults when AWS SSM parameters are not present.
+
+The Blueprint declares Ask Ship assistant defaults:
+
+| Variable | Value |
+|---|---|
+| `SHIP_ASSISTANT_ENABLED` | `true` |
+| `SHIP_ASSISTANT_PROVIDER` | `openai` |
+| `SHIP_ASSISTANT_MODEL` | `gpt-4o-mini` |
+| `SHIP_ASSISTANT_UPLOAD_INDEXING` | `true` |
+| `SHIP_UPLOAD_STORAGE` | `local` |
+| `OPENAI_API_KEY` | Add manually in Render; declared with `sync: false` |
+
+`SHIP_UPLOAD_STORAGE=local` is the current demo path for upload-backed Ask Ship answers on Render. It is suitable for demonstration, but it is not durable across rebuilds unless a persistent disk is added. For durable production uploads, configure object storage instead.
+
+### Render Verification
+
+After the Render deploy completes:
+
+```bash
+curl https://<render-app-url>/health
+```
+
+Then verify in a browser:
+
+- The app loads at the Render URL.
+- First-time setup or login works.
+- API calls succeed from the app.
+- Creating/opening a document connects `/collaboration/*` over `wss`.
+- `/events` connects after login.
+- Render logs show migrations applied and no startup errors.
+- `GET /api/assistant/status` returns `available: true` after login when `OPENAI_API_KEY` is set.
+- The Ask Ship rail button opens the assistant panel below Teams.
+- A known Ask Ship question returns an answer with `traceId`, and `GET /api/assistant/traces/<traceId>` returns the ordered retrieval, rerank, and model events.
+- Uploading a supported `.txt`, `.md`, `.csv`, `.pdf`, or `.docx` file from a document page reaches `indexed` status and can be cited by Ask Ship.
+
+### Render Security Probe Trigger
+
+The Blueprint also includes a cron job named `ship-security-probe`. Render cron jobs can be run manually from the Render dashboard by opening the cron job and selecting **Trigger Run**.
+
+Ship super-admins can also trigger the same cron job from **Admin Dashboard -> Operations -> Security Probe -> Trigger Run**. That in-app button calls Render's cron run API from the backend so the Render API key is never exposed to the browser.
+
+The job runs:
+
+```bash
+node scripts/render-security-probe.mjs
+```
+
+The generated markdown report is printed into the Render job logs. Files created during the job are ephemeral on Render and are not copied back to this machine.
+
+Observed public submission evidence from 2026-05-23:
+
+- Public app URL: `https://ship-wf2i.onrender.com`
+- Cron job: `ship-security-probe`
+- Trigger path: **Admin Dashboard -> Operations -> Security Probe -> Trigger Run**
+- Report destination: Render cron job logs
+- Dependency audit result: `0` high and `0` critical CVEs
+- CORS/CSP: untrusted credentialed origin rejected; API and web CSP headers present
+- Secret handling: common accidental exposure paths did not reveal secret-like values
+- Rate limiting: global API, login, WebSocket connection, and WebSocket message limiters were confirmed by code review evidence in the report
+- Error verbosity: malformed JSON returned a controlled `REQUEST_ERROR` response without stack traces, SQL, internal paths, or secret names
+- WebSockets: unauthenticated `/events` and `/collaboration/*` upgrades returned `401`; authenticated event and collaboration sockets opened and handled ping, malformed payloads, and an oversized collaboration payload safely
+- Browser WebSocket verification: Chrome DevTools Network `ws` filter showed `/collaboration/wiki:<document-id>` and `/events` requests to `ship-wf2i.onrender.com` with status `101` and the browser lock indicator, confirming `wss` transport on both deployed channels
+- Post-probe health: `/health` returned `200` with `{"status":"ok"}`
+
+For the in-app Trigger Run button, set these environment variables on the `ship` web service:
+
+| Variable | Value |
+|---|---|
+| `RENDER_API_KEY` | Render API key from Account Settings |
+| `RENDER_SECURITY_PROBE_CRON_JOB_ID` | The `ship-security-probe` cron job ID, starting with `crn-` |
+
+The Blueprint declares those web-service variables with `sync: false` for new Blueprint installs. For an already-deployed Blueprint, add them manually in the Render dashboard because Render ignores newly-added `sync: false` values on existing Blueprint syncs.
+
+For best public-surface coverage, set these environment variables on the `ship-security-probe` cron job after the Blueprint sync:
+
+| Variable | Value |
+|---|---|
+| `SHIP_SECURITY_WEB_URL` | The public Render app URL, for example `https://ship.onrender.com` |
+| `SHIP_SECURITY_API_URL` | The same public Render app URL |
+| `SHIP_SECURITY_EMAIL` | A deployed app user for authenticated checks |
+| `SHIP_SECURITY_PASSWORD` | That user's password |
+
+If `SHIP_SECURITY_WEB_URL` and `SHIP_SECURITY_API_URL` are not set, the job falls back to Render's private service address via `SHIP_SECURITY_HOSTPORT`. That is useful for a quick health-style run, but the public URL is the better audit target.
+
+To write the report onto this local checkout instead, run the probe from your machine:
+
+```powershell
+pnpm security:audit -- --mode remote --web-url https://<render-app-url> --api-url https://<render-app-url> --non-interactive --report-name security-audit-render
+```
+
+### Ask Ship Assistant
+
+Ask Ship configuration, supported indexed file types, trace inspection, evals, storage notes, and the demo flow are documented in `docs/assistant.md`.
+
+### Optional Production Features
+
+The Render submission path does not configure AWS-backed file attachments. If file upload/download is part of the demo, configure `S3_UPLOADS_BUCKET`, `CDN_DOMAIN`, and AWS credentials, or add a Render-compatible persistent storage path before testing that workflow.
+
+## Prerequisites
+
+Install required tools:
+
+```bash
+# Terraform
+brew install terraform
+
+# AWS CLI
+brew install awscli
+
+# pnpm (package manager)
+npm install -g pnpm
+
+# PostgreSQL client (for database initialization)
+brew install postgresql@16
+```
+
+Configure AWS credentials:
+
+```bash
+aws configure
+# Enter your AWS Access Key ID, Secret Access Key, and default region
+```
+
+## Architecture Overview
+
+```
+Frontend (React) → CloudFront → S3
+API (Express)    → ALB → Elastic Beanstalk (Docker) → Aurora PostgreSQL
+                                                    ↓
+                                            SSM Parameter Store
+```
+
+## Deployment Steps
+
+### 1. Deploy Infrastructure (One-time)
+
+Infrastructure includes VPC, Aurora database, S3, CloudFront, and Elastic Beanstalk application.
+
+```bash
+# Copy and configure Terraform variables
+cd terraform
+cp terraform.tfvars.example terraform.tfvars
+
+# Edit terraform.tfvars with your values:
+# - aws_region: Your AWS region (e.g., "us-east-1")
+# - project_name: "ship" (or your project name)
+# - environment: "dev", "staging", or "prod"
+# - route53_zone_id: (optional) Your Route53 zone ID for custom domains
+# - api_domain_name: (optional) Custom API domain (e.g., "api.example.gov")
+# - app_domain_name: (optional) Custom frontend domain (e.g., "app.example.gov")
+
+# Deploy infrastructure
+cd ..
+./scripts/deploy-infrastructure.sh
+```
+
+**Important:** Save the Terraform outputs - you'll need them for the next steps.
+
+**Cost note:** Older docs estimated `~$80/month` for a narrower dev deployment. That estimate is out of date for the current full Terraform plan, which is roughly `$220-$300/month` at low traffic because it includes NAT Gateway, ALB, Aurora Serverless v2, CloudFront, WAF/Bot Control, Kinesis real-time logs, public IPv4 charges, and CloudWatch/VPC flow logs. See `DEPLOYMENT_DECISION.md`.
+
+### 2. Deploy API (Initial and Subsequent)
+
+Deploy the Express API to Elastic Beanstalk:
+
+```bash
+# Set environment variables (required)
+export EB_APP_NAME="ship-api"           # From terraform output eb_application_name
+export EB_ENV_NAME="ship-api-dev"       # From terraform output eb_environment_name
+export AWS_REGION="us-east-1"           # Your AWS region
+
+# Deploy
+./scripts/deploy-api.sh
+```
+
+The script automatically:
+1. Builds the shared TypeScript package
+2. Builds the API package (including schema.sql)
+3. Creates a deployment ZIP with proper structure
+4. Uploads to S3 and creates EB application version
+5. Deploys to EB environment and waits for completion
+
+**First deployment:** 5-10 minutes
+**Subsequent deployments:** 3-5 minutes
+
+### 3. Initialize Database (One-time)
+
+Apply database schema and optionally seed with test data:
+
+```bash
+./scripts/init-database.sh
+```
+
+This script:
+- Fetches the DATABASE_URL from SSM Parameter Store
+- Applies the schema from `api/src/db/schema.sql`
+- Optionally seeds test data
+
+### 4. Deploy Frontend (Frequent)
+
+Deploy the React frontend:
+
+```bash
+./scripts/deploy-frontend.sh
+```
+
+This script:
+- Builds the React app (`pnpm build:web`)
+- Syncs to S3 bucket
+- Invalidates CloudFront cache
+
+**Build takes:** 1-2 minutes
+**CloudFront invalidation takes:** 1-2 minutes
+
+## Configuration
+
+### Environment Variables
+
+Environment variables are managed via:
+- SSM Parameter Store (for secrets)
+- `.ebextensions/01-env.config` (for non-secrets)
+
+To update environment variables:
+
+1. **For secrets:** Update SSM Parameter Store
+   ```bash
+   aws ssm put-parameter \
+     --name "/ship/dev/DATABASE_URL" \
+     --type "SecureString" \
+     --value "postgresql://..." \
+     --overwrite
+   ```
+
+2. **For non-secrets:** Update `.ebextensions/01-env.config` and redeploy
+
+### Custom Domains
+
+To use custom domains (e.g., `api.example.gov` and `app.example.gov`):
+
+1. Ensure DNS delegation is configured:
+   ```bash
+   dig +short api.example.gov NS
+   dig +short app.example.gov NS
+   ```
+
+2. Update `terraform.tfvars`:
+   ```hcl
+   route53_zone_id  = "Z1234567890ABC"
+   api_domain_name  = "api.example.gov"
+   app_domain_name  = "app.example.gov"
+   ```
+
+3. Re-run Terraform:
+   ```bash
+   ./scripts/deploy-infrastructure.sh
+   ```
+
+4. Wait for ACM certificate validation (5-30 minutes)
+
+## Monitoring and Logs
+
+### View API Logs
+
+Using AWS CLI:
+
+```bash
+# Request logs from EB
+aws elasticbeanstalk request-environment-info \
+  --environment-name ship-api-dev \
+  --info-type tail
+
+# Wait a moment, then retrieve them
+aws elasticbeanstalk retrieve-environment-info \
+  --environment-name ship-api-dev \
+  --info-type tail
+```
+
+Or use CloudWatch Logs directly:
+- Application: `/aws/elasticbeanstalk/ship-api-dev/var/log/eb-docker/containers/eb-current-app/stdouterr.log`
+- Docker: `/aws/elasticbeanstalk/ship-api-dev/var/log/eb-docker/containers/eb-current-app/`
+
+### View API Status
+
+```bash
+# Environment status
+aws elasticbeanstalk describe-environments \
+  --environment-names ship-api-dev \
+  --query "Environments[0].[Status,Health,HealthStatus]" \
+  --output table
+
+# Detailed health
+aws elasticbeanstalk describe-environment-health \
+  --environment-name ship-api-dev \
+  --attribute-names All
+```
+
+### View Frontend Access Logs
+
+CloudFront access logs are disabled by default to save costs. To enable:
+
+1. Create S3 bucket for logs
+2. Update `terraform/s3-cloudfront.tf` to add logging configuration
+3. Apply Terraform changes
+
+## Troubleshooting
+
+### API Not Starting
+
+1. Check EB logs: `eb logs`
+2. Common issues:
+   - Database connection failed (check SSM parameters)
+   - Port mismatch (ensure PORT=8080 in env)
+   - Build failed (check Dockerfile)
+
+### WebSocket Not Working
+
+1. Check ALB target group health
+2. Verify sticky sessions are enabled (should be in `.ebextensions/01-env.config`)
+3. Check nginx configuration in `.platform/nginx/conf.d/websocket.conf`
+
+### Database Connection Timeout
+
+1. Check security group rules:
+   ```bash
+   cd terraform
+   terraform state show aws_security_group_rule.aurora_ingress_from_eb
+   ```
+
+2. Verify EB instances are in private subnets
+3. Check NAT Gateway is running (required for Aurora DNS resolution)
+
+### Frontend Not Loading
+
+1. Check CloudFront distribution status:
+   ```bash
+   aws cloudfront get-distribution --id $(cd terraform && terraform output -raw cloudfront_distribution_id)
+   ```
+
+2. Check S3 bucket contents:
+   ```bash
+   aws s3 ls s3://$(cd terraform && terraform output -raw s3_bucket_name)/
+   ```
+
+3. Wait for CloudFront invalidation to complete (1-2 minutes)
+
+## Cost Optimization
+
+### Development Environment
+
+- Use Aurora Serverless v2 with `min_capacity = 0.5` (pauses when idle)
+- Use t3.small instances for EB (~$15/month)
+- Enable CloudFront regional restrictions if only serving US
+
+### Production Environment
+
+- Increase Aurora capacity for performance
+- Use t3.medium or larger for EB
+- Enable multi-AZ for EB (2+ instances)
+- Enable Aurora read replicas if needed
+
+## Security Compliance
+
+This deployment follows government compliance patterns:
+
+- **Encryption at rest:** Aurora (storage), S3 (AES256)
+- **Encryption in transit:** TLS 1.2+ for all connections
+- **Audit logging:** CloudTrail (API calls), VPC Flow Logs (network), CloudWatch Logs (application)
+- **Secret management:** SSM Parameter Store (SecureString)
+- **Network isolation:** Private subnets for compute/database, no internet-facing databases
+- **Container images:** ECR Public only (no Docker Hub)
+
+## Disaster Recovery
+
+### Backup Strategy
+
+- **Aurora:** Automated daily backups (7-day retention for prod)
+- **S3:** Versioning enabled on frontend bucket
+
+### Restore Procedure
+
+1. **Database restore:**
+   ```bash
+   aws rds restore-db-cluster-to-point-in-time \
+     --source-db-cluster-identifier ship-aurora \
+     --target-db-cluster-identifier ship-aurora-restored \
+     --restore-to-time 2024-01-01T00:00:00Z
+   ```
+
+2. **Frontend restore:**
+   ```bash
+   aws s3api list-object-versions --bucket ship-frontend-dev --prefix index.html
+   aws s3api get-object --bucket ship-frontend-dev --key index.html --version-id <VERSION_ID> index.html
+   ```
+
+## Maintenance
+
+### Update Node.js Version
+
+1. Update Dockerfile base image:
+   ```dockerfile
+   FROM public.ecr.aws/docker/library/node:22-slim
+   ```
+
+2. Redeploy API: `./scripts/deploy-api.sh`
+
+### Update Database Schema
+
+1. Update `api/src/db/schema.sql`
+2. Apply manually:
+   ```bash
+   DATABASE_URL=$(aws ssm get-parameter --name "/ship/dev/DATABASE_URL" --with-decryption --query "Parameter.Value" --output text)
+   psql "$DATABASE_URL" -f api/src/db/schema.sql
+   ```
+
+### Terraform State Management
+
+For production, use S3 backend for Terraform state:
+
+1. Create S3 bucket: `ship-terraform-state`
+2. Uncomment backend configuration in `terraform/versions.tf`
+3. Migrate state:
+   ```bash
+   cd terraform
+   terraform init -migrate-state
+   ```
+
+## Cleanup
+
+To destroy all infrastructure (WARNING: irreversible):
+
+```bash
+# Delete EB environment first
+aws elasticbeanstalk terminate-environment \
+  --environment-name ship-api-dev
+
+# Wait for termination (5-10 minutes)
+aws elasticbeanstalk wait environment-terminated \
+  --environment-name ship-api-dev
+
+# Then destroy Terraform resources
+cd terraform
+terraform destroy
+```
+
+This will delete:
+- All EC2 instances, load balancers, and networking
+- Aurora database (final snapshot created if prod)
+- S3 bucket (must be empty first)
+- CloudFront distribution
+- All SSM parameters
+
+**Total time:** 15-20 minutes

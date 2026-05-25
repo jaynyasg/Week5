@@ -1,0 +1,8 @@
+{
+  "captured_at": "2026-05-20T18:32:57.8983948Z",
+  "command": "& 'C:\\Program Files\\Git\\bin\\bash.exe' scripts/check-empty-tests.sh e2e",
+  "result": "pass",
+  "empty_tests_detected": 0,
+  "output": "No empty tests found.",
+  "note": "After the pre-commit parser fix, the previously reported 6 empty tests are no longer flagged; they were false positives caused by nested callback/object closers being treated as test endings."
+}

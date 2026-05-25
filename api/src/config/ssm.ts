@@ -1,0 +1,93 @@
+/**
+ * SSM Parameter Store - Application Configuration
+ *
+ * This file loads application configuration from AWS SSM Parameter Store.
+ *
+ * Secrets Storage:
+ * ─────────────────
+ * SSM Parameter Store (/ship/{env}/):
+ *   - DATABASE_URL, SESSION_SECRET, CORS_ORIGIN
+ *   - Application config that changes per environment
+ *   - CAIA OAuth credentials (CAIA_ISSUER_URL, CAIA_CLIENT_ID, etc.)
+ */
+import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
+
+// Lazy-initialized client to avoid keeping Node.js alive during import tests
+let _client: SSMClient | null = null;
+
+const REQUIRED_PRODUCTION_ENV = ['DATABASE_URL', 'SESSION_SECRET'] as const;
+
+function hasEnvValue(name: string): boolean {
+  return !!process.env[name]?.trim();
+}
+
+function applyRenderDefaults(): void {
+  if (process.env.RENDER !== 'true' || !process.env.RENDER_EXTERNAL_URL) {
+    return;
+  }
+
+  process.env.CORS_ORIGIN ||= process.env.RENDER_EXTERNAL_URL;
+  process.env.APP_BASE_URL ||= process.env.RENDER_EXTERNAL_URL;
+}
+
+function getClient(): SSMClient {
+  if (!_client) {
+    _client = new SSMClient({ region: process.env.AWS_REGION || 'us-east-1' });
+  }
+  return _client;
+}
+
+export async function getSSMSecret(name: string): Promise<string> {
+  const command = new GetParameterCommand({
+    Name: name,
+    WithDecryption: true,
+  });
+
+  const response = await getClient().send(command);
+  if (!response.Parameter?.Value) {
+    throw new Error(`SSM parameter ${name} not found`);
+  }
+  return response.Parameter.Value;
+}
+
+export async function loadProductionSecrets(): Promise<void> {
+  if (process.env.NODE_ENV !== 'production') {
+    return; // Use .env files for local dev
+  }
+
+  applyRenderDefaults();
+
+  const missingEnvVars = REQUIRED_PRODUCTION_ENV.filter((name) => !hasEnvValue(name));
+  if (missingEnvVars.length === 0) {
+    console.log('Using production configuration from environment variables');
+    return;
+  }
+
+  if (process.env.RENDER === 'true') {
+    throw new Error(`Missing required Render environment variable(s): ${missingEnvVars.join(', ')}`);
+  }
+
+  const environment = process.env.ENVIRONMENT || 'prod';
+  const basePath = `/ship/${environment}`;
+
+  console.log(`Loading secrets from SSM path: ${basePath}`);
+
+  const [databaseUrl, sessionSecret, corsOrigin, cdnDomain, appBaseUrl] = await Promise.all([
+    getSSMSecret(`${basePath}/DATABASE_URL`),
+    getSSMSecret(`${basePath}/SESSION_SECRET`),
+    getSSMSecret(`${basePath}/CORS_ORIGIN`),
+    getSSMSecret(`${basePath}/CDN_DOMAIN`),
+    getSSMSecret(`${basePath}/APP_BASE_URL`),
+  ]);
+
+  process.env.DATABASE_URL = databaseUrl;
+  process.env.SESSION_SECRET = sessionSecret;
+  process.env.CORS_ORIGIN = corsOrigin;
+  process.env.CDN_DOMAIN = cdnDomain;
+  process.env.APP_BASE_URL = appBaseUrl;
+
+  console.log('Secrets loaded from SSM Parameter Store');
+  console.log(`CORS_ORIGIN: ${corsOrigin}`);
+  console.log(`CDN_DOMAIN: ${cdnDomain}`);
+  console.log(`APP_BASE_URL: ${appBaseUrl}`);
+}

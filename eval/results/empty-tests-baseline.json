@@ -1,0 +1,36 @@
+{
+  "audit_unit": "U5 (Test Coverage and Quality)",
+  "captured_at": "2026-05-19",
+  "source": "Ship pre-commit hook (scripts/check-empty-tests.sh)",
+  "finding": "Empty Playwright E2E tests that silently pass",
+  "severity": "High",
+  "interpretation": "Tests using test(...) (not test.fixme/skip/todo) with bodies containing no expect( or page. calls. They run as part of the suite, return success, and verify nothing. This creates false confidence in test coverage.",
+  "affected_files": [
+    {
+      "file": "e2e/autosave-race-conditions.spec.ts",
+      "empty_test_count": 2
+    },
+    {
+      "file": "e2e/critical-blockers.spec.ts",
+      "empty_test_count": 2
+    },
+    {
+      "file": "e2e/session-timeout.spec.ts",
+      "empty_test_count": 2
+    }
+  ],
+  "total_empty_tests": 6,
+  "detection_mechanism": "Awk-based body scan in scripts/check-empty-tests.sh; tests are flagged if they use test(...) without expect( or page. calls inside",
+  "remediation_options": [
+    "Convert to test.fixme('name', async () => { /* TODO */ }) — shows in report as a deliberate stub",
+    "Implement real assertions for the test's intent",
+    "Delete the test if intent is no longer valid"
+  ],
+  "deferred_to": "U15 — Test Coverage Additions/Fixes. The PDF improvement target asks for 3 meaningful new tests OR 3 flaky test fixes; converting these 6 silently-passing tests to test.fixme counts as a meaningful quality improvement.",
+  "audit_implications": [
+    "AUDIT.md Category 5 (Test Coverage and Quality) must call out the 6-test gap between 'tests in suite' and 'tests that actually verify behavior'.",
+    "The Ship suite reports 73+ Playwright tests passing, but at least 6 of those are false positives.",
+    "The pre-commit hook itself is a strong architectural decision — Ship knows this is a footgun.",
+    "Question for U24/ORIENTATION §3.1: how did 6 empty tests get merged with the hook in place? Either hook was added AFTER these tests, or someone used --no-verify. Suggests history worth investigating."
+  ]
+}

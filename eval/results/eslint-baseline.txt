@@ -1,0 +1,6 @@
+
+> ship@0.0.0 lint C:\Users\jaynyasg\OneDrive\Documents\GitLab\ship
+> pnpm --recursive run lint
+
+Scope: 3 of 4 workspace projects
+None of the selected packages has a "lint" script

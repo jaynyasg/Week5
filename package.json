@@ -1,0 +1,69 @@
+{
+  "name": "ship",
+  "version": "0.0.0",
+  "private": true,
+  "description": "Ship monorepo - API + Web + Shared types",
+  "packageManager": "pnpm@10.27.0",
+  "pnpm": {
+    "overrides": {
+      "qs": "6.15.2",
+      "uuid": "11.1.1",
+      "ws": "8.20.1"
+    }
+  },
+  "engines": {
+    "node": ">=20.0.0",
+    "pnpm": ">=9.0.0"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:sh": "./scripts/dev.sh",
+    "docker:up": "docker compose -f docker-compose.local.yml up --build",
+    "docker:down": "docker compose -f docker-compose.local.yml down",
+    "docker:clean": "docker compose -f docker-compose.local.yml down -v",
+    "dev:raw": "pnpm --parallel --recursive run dev",
+    "dev:api": "pnpm --filter @ship/api dev",
+    "dev:web": "pnpm --filter @ship/web dev",
+    "dev:shared": "pnpm --filter @ship/shared dev",
+    "build": "pnpm --recursive run build",
+    "build:shared": "pnpm --filter @ship/shared build",
+    "build:api": "pnpm run build:shared && pnpm --filter @ship/api build",
+    "build:web": "pnpm run build:shared && pnpm --filter @ship/web build",
+    "type-check": "pnpm --recursive run type-check",
+    "lint": "pnpm --recursive run lint",
+    "audit:ci": "node scripts/check-dependency-audit.mjs",
+    "security:audit": "pnpm --filter @ship/api security:audit",
+    "clean": "pnpm --recursive run clean && rm -rf node_modules",
+    "test": "pnpm --filter @ship/api test",
+    "test:e2e": "node scripts/run-e2e.mjs",
+    "test:e2e:raw": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "worktree:init": "./scripts/worktree-init.sh",
+    "db:seed": "pnpm --filter @ship/api db:seed",
+    "db:migrate": "pnpm --filter @ship/api db:migrate",
+    "db:orphan-check": "pnpm --filter @ship/api db:orphan-check",
+    "assistant:eval": "pnpm --filter @ship/api assistant:eval",
+    "prepare": "husky",
+    "postinstall": "git config merge.ours.driver true && (command -v comply >/dev/null 2>&1 || echo '\\n⚠️  comply CLI not installed - pre-commit hooks require it\\n   Install with: pip install comply-cli\\n')"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.11.0",
+    "@eslint/js": "^9.39.4",
+    "@playwright/test": "^1.57.0",
+    "@testcontainers/postgresql": "^11.11.0",
+    "@types/supertest": "^6.0.3",
+    "@vitest/ui": "^4.0.16",
+    "eslint": "^9.39.4",
+    "eslint-plugin-jsx-a11y": "^6.10.2",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "get-port": "^7.1.0",
+    "globals": "^17.6.0",
+    "husky": "^9.1.7",
+    "prettier": "^3.4.2",
+    "supertest": "^7.1.4",
+    "testcontainers": "^11.11.0",
+    "typescript": "^6.0.3",
+    "typescript-eslint": "^8.59.4",
+    "vitest": "^4.0.16"
+  }
+}

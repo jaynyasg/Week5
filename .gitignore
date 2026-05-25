@@ -1,0 +1,118 @@
+# Dependencies
+node_modules
+.pnpm-store
+
+# Build outputs
+dist
+build
+.turbo
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Temporary files
+*.tmp
+.cache
+
+# Ralph loop local state
+.claude/ralph-loop.local.md
+
+# PRD test enforcement timestamp (written by bash-command-validator.sh, read by prd-enforcement.sh)
+.claude/.last-test-run
+
+# Claude agents
+.claude/agents/
+
+# Playwright MCP screenshots
+.playwright-mcp/
+
+# Evidence/verification screenshots
+evidence/
+*.png
+
+# Playwright test artifacts
+playwright-report/
+test-results/
+
+# Plans
+/plans
+
+.worktrees
+
+# Dev server port allocation
+.ports
+
+# Audit artifacts
+.audit
+
+# Terraform
+terraform/.terraform/
+terraform/.terraform.lock.hcl
+terraform/terraform.tfstate
+terraform/terraform.tfstate.backup
+terraform/*.tfplan
+terraform/tfplan
+terraform/terraform.tfvars
+terraform/environments/*/terraform.tfvars
+terraform/environments/*/.terraform.lock.hcl
+terraform/bootstrap/.terraform/
+terraform/bootstrap/.terraform.lock.hcl
+terraform/bootstrap/terraform.tfstate
+terraform/bootstrap/terraform.tfstate.backup
+terraform/.tfbackend
+terraform/test-runner/.terraform/
+terraform/test-runner/.terraform.lock.hcl
+terraform/test-runner/terraform.tfstate
+terraform/test-runner/terraform.tfstate.backup
+
+# Elastic Beanstalk
+api/.elasticbeanstalk/
+.elasticbeanstalk/
+
+# AWS
+.aws/
+api/uploads/
+
+# Research notes
+research/
+.research/
+.claude/deploy-logs/
+**/deploy-logs/
+.claude/deploy-config.json
+
+# Deployment artifacts
+ship-api-*.zip
+
+# Vendor (local SDK links)
+vendor/
+
+# SSDF-Helper - Memory Safety Analysis Reports (CUI/ISVI)
+/SSDF-Helper/
+.pr-checklist.json
+.dev-ports
+.claude/settings.local.json
+
+# Vite PWA dev artifacts
+web/dev-dist/
+
+# AgentOps session artifacts
+/.agents/

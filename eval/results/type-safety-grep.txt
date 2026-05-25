@@ -1,0 +1,8 @@
+=== any types ===
+99
+=== as assertions ===
+1422
+=== non-null assertions ===
+24
+=== ts-ignore + ts-expect-error ===
+1

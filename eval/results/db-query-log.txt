@@ -1,0 +1,300 @@
+	     , NULL
+	FROM pg_catalog.pg_publication p
+	     JOIN pg_catalog.pg_publication_namespace pn ON p.oid = pn.pnpubid
+	     JOIN pg_catalog.pg_class pc ON pc.relnamespace = pn.pnnspid
+	WHERE pc.oid ='16535' and pg_catalog.pg_relation_is_publishable('16535')
+	UNION
+	SELECT pubname
+	     , pg_get_expr(pr.prqual, c.oid)
+	     , (CASE WHEN pr.prattrs IS NOT NULL THEN
+	         (SELECT string_agg(attname, ', ')
+	           FROM pg_catalog.generate_series(0, pg_catalog.array_upper(pr.prattrs::pg_catalog.int2[], 1)) s,
+	                pg_catalog.pg_attribute
+	          WHERE attrelid = pr.prrelid AND attnum = prattrs[s])
+	        ELSE NULL END) FROM pg_catalog.pg_publication p
+	     JOIN pg_catalog.pg_publication_rel pr ON p.oid = pr.prpubid
+	     JOIN pg_catalog.pg_class c ON c.oid = pr.prrelid
+	WHERE pr.prrelid = '16535'
+	UNION
+	SELECT pubname
+	     , NULL
+	     , NULL
+	FROM pg_catalog.pg_publication p
+	WHERE p.puballtables AND pg_catalog.pg_relation_is_publishable('16535')
+	ORDER BY 1;
+2026-05-19 22:06:17.987 UTC [18271] LOG:  statement: SELECT t.tgname, pg_catalog.pg_get_triggerdef(t.oid, true), t.tgenabled, t.tgisinternal,
+	  CASE WHEN t.tgparentid != 0 THEN
+	    (SELECT u.tgrelid::pg_catalog.regclass
+	     FROM pg_catalog.pg_trigger AS u,
+	          pg_catalog.pg_partition_ancestors(t.tgrelid) WITH ORDINALITY AS a(relid, depth)
+	     WHERE u.tgname = t.tgname AND u.tgrelid = a.relid
+	           AND u.tgparentid = 0
+	     ORDER BY a.depth LIMIT 1)
+	  END AS parent
+	FROM pg_catalog.pg_trigger t
+	WHERE t.tgrelid = '16535' AND (NOT t.tgisinternal OR (t.tgisinternal AND t.tgenabled = 'D'))
+	ORDER BY 1;
+2026-05-19 22:06:17.988 UTC [18271] LOG:  statement: SELECT c.oid::pg_catalog.regclass
+	FROM pg_catalog.pg_class c, pg_catalog.pg_inherits i
+	WHERE c.oid = i.inhparent AND i.inhrelid = '16535'
+	  AND c.relkind != 'p' AND c.relkind != 'I'
+	ORDER BY inhseqno;
+2026-05-19 22:06:17.990 UTC [18271] LOG:  statement: SELECT c.oid::pg_catalog.regclass, c.relkind, inhdetachpending, pg_catalog.pg_get_expr(c.relpartbound, c.oid)
+	FROM pg_catalog.pg_class c, pg_catalog.pg_inherits i
+	WHERE c.oid = i.inhrelid AND i.inhparent = '16535'
+	ORDER BY pg_catalog.pg_get_expr(c.relpartbound, c.oid) = 'DEFAULT', c.oid::pg_catalog.regclass::pg_catalog.text;
+2026-05-19 22:06:18.287 UTC [18278] LOG:  statement: SELECT c.oid,
+	  n.nspname,
+	  c.relname
+	FROM pg_catalog.pg_class c
+	     LEFT JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+	WHERE c.relname OPERATOR(pg_catalog.~) '^(documents)$' COLLATE pg_catalog.default
+	  AND pg_catalog.pg_table_is_visible(c.oid)
+	ORDER BY 2, 3;
+2026-05-19 22:06:18.289 UTC [18278] LOG:  statement: SELECT c.relchecks, c.relkind, c.relhasindex, c.relhasrules, c.relhastriggers, c.relrowsecurity, c.relforcerowsecurity, false AS relhasoids, c.relispartition, '', c.reltablespace, CASE WHEN c.reloftype = 0 THEN '' ELSE c.reloftype::pg_catalog.regtype::pg_catalog.text END, c.relpersistence, c.relreplident, am.amname
+	FROM pg_catalog.pg_class c
+	 LEFT JOIN pg_catalog.pg_class tc ON (c.reltoastrelid = tc.oid)
+	LEFT JOIN pg_catalog.pg_am am ON (c.relam = am.oid)
+	WHERE c.oid = '16535';
+2026-05-19 22:06:18.290 UTC [18278] LOG:  statement: SELECT a.attname,
+	  pg_catalog.format_type(a.atttypid, a.atttypmod),
+	  (SELECT pg_catalog.pg_get_expr(d.adbin, d.adrelid, true)
+	   FROM pg_catalog.pg_attrdef d
+	   WHERE d.adrelid = a.attrelid AND d.adnum = a.attnum AND a.atthasdef),
+	  a.attnotnull,
+	  (SELECT c.collname FROM pg_catalog.pg_collation c, pg_catalog.pg_type t
+	   WHERE c.oid = a.attcollation AND t.oid = a.atttypid AND a.attcollation <> t.typcollation) AS attcollation,
+	  a.attidentity,
+	  a.attgenerated
+	FROM pg_catalog.pg_attribute a
+	WHERE a.attrelid = '16535' AND a.attnum > 0 AND NOT a.attisdropped
+	ORDER BY a.attnum;
+2026-05-19 22:06:18.292 UTC [18278] LOG:  statement: SELECT c2.relname, i.indisprimary, i.indisunique, i.indisclustered, i.indisvalid, pg_catalog.pg_get_indexdef(i.indexrelid, 0, true),
+	  pg_catalog.pg_get_constraintdef(con.oid, true), contype, condeferrable, condeferred, i.indisreplident, c2.reltablespace
+	FROM pg_catalog.pg_class c, pg_catalog.pg_class c2, pg_catalog.pg_index i
+	  LEFT JOIN pg_catalog.pg_constraint con ON (conrelid = i.indrelid AND conindid = i.indexrelid AND contype IN ('p','u','x'))
+	WHERE c.oid = '16535' AND c.oid = i.indrelid AND i.indexrelid = c2.oid
+	ORDER BY i.indisprimary DESC, c2.relname;
+2026-05-19 22:06:18.295 UTC [18278] LOG:  statement: SELECT r.conname, pg_catalog.pg_get_constraintdef(r.oid, true)
+	FROM pg_catalog.pg_constraint r
+	WHERE r.conrelid = '16535' AND r.contype = 'c'
+	ORDER BY 1;
+2026-05-19 22:06:18.295 UTC [18278] LOG:  statement: SELECT true as sametable, conname,
+	  pg_catalog.pg_get_constraintdef(r.oid, true) as condef,
+	  conrelid::pg_catalog.regclass AS ontable
+	FROM pg_catalog.pg_constraint r
+	WHERE r.conrelid = '16535' AND r.contype = 'f'
+	     AND conparentid = 0
+	ORDER BY conname
+2026-05-19 22:06:18.296 UTC [18278] LOG:  statement: SELECT conname, conrelid::pg_catalog.regclass AS ontable,
+	       pg_catalog.pg_get_constraintdef(oid, true) AS condef
+	  FROM pg_catalog.pg_constraint c
+	 WHERE confrelid IN (SELECT pg_catalog.pg_partition_ancestors('16535')
+	                     UNION ALL VALUES ('16535'::pg_catalog.regclass))
+	       AND contype = 'f' AND conparentid = 0
+	ORDER BY conname;
+2026-05-19 22:06:18.297 UTC [18278] LOG:  statement: SELECT pol.polname, pol.polpermissive,
+	  CASE WHEN pol.polroles = '{0}' THEN NULL ELSE pg_catalog.array_to_string(array(select rolname from pg_catalog.pg_roles where oid = any (pol.polroles) order by 1),',') END,
+	  pg_catalog.pg_get_expr(pol.polqual, pol.polrelid),
+	  pg_catalog.pg_get_expr(pol.polwithcheck, pol.polrelid),
+	  CASE pol.polcmd
+	    WHEN 'r' THEN 'SELECT'
+	    WHEN 'a' THEN 'INSERT'
+	    WHEN 'w' THEN 'UPDATE'
+	    WHEN 'd' THEN 'DELETE'
+	    END AS cmd
+	FROM pg_catalog.pg_policy pol
+	WHERE pol.polrelid = '16535' ORDER BY 1;
+2026-05-19 22:06:18.299 UTC [18278] LOG:  statement: SELECT oid, stxrelid::pg_catalog.regclass, stxnamespace::pg_catalog.regnamespace::pg_catalog.text AS nsp, stxname,
+	pg_catalog.pg_get_statisticsobjdef_columns(oid) AS columns,
+	  'd' = any(stxkind) AS ndist_enabled,
+	  'f' = any(stxkind) AS deps_enabled,
+	  'm' = any(stxkind) AS mcv_enabled,
+	stxstattarget
+	FROM pg_catalog.pg_statistic_ext
+	WHERE stxrelid = '16535'
+	ORDER BY nsp, stxname;
+2026-05-19 22:06:18.300 UTC [18278] LOG:  statement: SELECT pubname
+	     , NULL
+	     , NULL
+	FROM pg_catalog.pg_publication p
+	     JOIN pg_catalog.pg_publication_namespace pn ON p.oid = pn.pnpubid
+	     JOIN pg_catalog.pg_class pc ON pc.relnamespace = pn.pnnspid
+	WHERE pc.oid ='16535' and pg_catalog.pg_relation_is_publishable('16535')
+	UNION
+	SELECT pubname
+	     , pg_get_expr(pr.prqual, c.oid)
+	     , (CASE WHEN pr.prattrs IS NOT NULL THEN
+	         (SELECT string_agg(attname, ', ')
+	           FROM pg_catalog.generate_series(0, pg_catalog.array_upper(pr.prattrs::pg_catalog.int2[], 1)) s,
+	                pg_catalog.pg_attribute
+	          WHERE attrelid = pr.prrelid AND attnum = prattrs[s])
+	        ELSE NULL END) FROM pg_catalog.pg_publication p
+	     JOIN pg_catalog.pg_publication_rel pr ON p.oid = pr.prpubid
+	     JOIN pg_catalog.pg_class c ON c.oid = pr.prrelid
+	WHERE pr.prrelid = '16535'
+	UNION
+	SELECT pubname
+	     , NULL
+	     , NULL
+	FROM pg_catalog.pg_publication p
+	WHERE p.puballtables AND pg_catalog.pg_relation_is_publishable('16535')
+	ORDER BY 1;
+2026-05-19 22:06:18.302 UTC [18278] LOG:  statement: SELECT t.tgname, pg_catalog.pg_get_triggerdef(t.oid, true), t.tgenabled, t.tgisinternal,
+	  CASE WHEN t.tgparentid != 0 THEN
+	    (SELECT u.tgrelid::pg_catalog.regclass
+	     FROM pg_catalog.pg_trigger AS u,
+	          pg_catalog.pg_partition_ancestors(t.tgrelid) WITH ORDINALITY AS a(relid, depth)
+	     WHERE u.tgname = t.tgname AND u.tgrelid = a.relid
+	           AND u.tgparentid = 0
+	     ORDER BY a.depth LIMIT 1)
+	  END AS parent
+	FROM pg_catalog.pg_trigger t
+	WHERE t.tgrelid = '16535' AND (NOT t.tgisinternal OR (t.tgisinternal AND t.tgenabled = 'D'))
+	ORDER BY 1;
+2026-05-19 22:06:18.303 UTC [18278] LOG:  statement: SELECT c.oid::pg_catalog.regclass
+	FROM pg_catalog.pg_class c, pg_catalog.pg_inherits i
+	WHERE c.oid = i.inhparent AND i.inhrelid = '16535'
+	  AND c.relkind != 'p' AND c.relkind != 'I'
+	ORDER BY inhseqno;
+2026-05-19 22:06:18.304 UTC [18278] LOG:  statement: SELECT c.oid::pg_catalog.regclass, c.relkind, inhdetachpending, pg_catalog.pg_get_expr(c.relpartbound, c.oid)
+	FROM pg_catalog.pg_class c, pg_catalog.pg_inherits i
+	WHERE c.oid = i.inhrelid AND i.inhparent = '16535'
+	ORDER BY pg_catalog.pg_get_expr(c.relpartbound, c.oid) = 'DEFAULT', c.oid::pg_catalog.regclass::pg_catalog.text;
+2026-05-19 22:06:36.737 UTC [18304] LOG:  execute <unnamed>: SELECT s.id, s.user_id, s.workspace_id, s.expires_at, s.last_activity, s.created_at,
+	              u.is_super_admin
+	       FROM sessions s
+	       JOIN users u ON s.user_id = u.id
+	       WHERE s.id = $1
+2026-05-19 22:06:36.737 UTC [18304] DETAIL:  parameters: $1 = '86a31d9a3a1e8d1c1e0618326167e187d119c75a24b78e10805658abe1c3e57e'
+2026-05-19 22:06:36.739 UTC [18304] LOG:  execute <unnamed>: UPDATE sessions SET last_activity = $1 WHERE id = $2
+2026-05-19 22:06:36.739 UTC [18304] DETAIL:  parameters: $1 = '2026-05-19 22:06:36.739+00', $2 = '86a31d9a3a1e8d1c1e0618326167e187d119c75a24b78e10805658abe1c3e57e'
+2026-05-19 22:06:36.743 UTC [18304] LOG:  execute <unnamed>: SELECT role FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2
+2026-05-19 22:06:36.743 UTC [18304] DETAIL:  parameters: $1 = '477e918b-7d2d-4515-97d5-5ff30d7edc4c', $2 = '254ace7c-ba50-4795-9cf8-fe6bed3e14d6'
+2026-05-19 22:06:36.746 UTC [18304] LOG:  execute <unnamed>: 
+	      SELECT id, workspace_id, document_type, title, parent_id, position,
+	             ticket_number, properties,
+	             created_at, updated_at, created_by, visibility
+	      FROM documents
+	      WHERE workspace_id = $1
+	        AND archived_at IS NULL
+	        AND deleted_at IS NULL
+	        AND (visibility = 'workspace' OR created_by = $2 OR $3 = TRUE)
+	     ORDER BY position ASC, created_at DESC
+2026-05-19 22:06:36.746 UTC [18304] DETAIL:  parameters: $1 = '477e918b-7d2d-4515-97d5-5ff30d7edc4c', $2 = '254ace7c-ba50-4795-9cf8-fe6bed3e14d6', $3 = 't'
+2026-05-19 22:06:36.771 UTC [18304] LOG:  execute <unnamed>: SELECT s.id, s.user_id, s.workspace_id, s.expires_at, s.last_activity, s.created_at,
+	              u.is_super_admin
+	       FROM sessions s
+	       JOIN users u ON s.user_id = u.id
+	       WHERE s.id = $1
+2026-05-19 22:06:36.771 UTC [18304] DETAIL:  parameters: $1 = '86a31d9a3a1e8d1c1e0618326167e187d119c75a24b78e10805658abe1c3e57e'
+2026-05-19 22:06:36.773 UTC [18304] LOG:  execute <unnamed>: UPDATE sessions SET last_activity = $1 WHERE id = $2
+2026-05-19 22:06:36.773 UTC [18304] DETAIL:  parameters: $1 = '2026-05-19 22:06:36.773+00', $2 = '86a31d9a3a1e8d1c1e0618326167e187d119c75a24b78e10805658abe1c3e57e'
+2026-05-19 22:06:36.776 UTC [18304] LOG:  execute <unnamed>: SELECT role FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2
+2026-05-19 22:06:36.776 UTC [18304] DETAIL:  parameters: $1 = '477e918b-7d2d-4515-97d5-5ff30d7edc4c', $2 = '254ace7c-ba50-4795-9cf8-fe6bed3e14d6'
+2026-05-19 22:06:36.779 UTC [18304] LOG:  execute <unnamed>: 
+	      SELECT d.id, d.title, d.properties, d.ticket_number,
+	             d.content,
+	             d.created_at, d.updated_at, d.created_by,
+	             d.started_at, d.completed_at, d.cancelled_at, d.reopened_at,
+	             d.converted_from_id,
+	             u.name as assignee_name,
+	             CASE WHEN person_doc.archived_at IS NOT NULL THEN true ELSE false END as assignee_archived
+	      FROM documents d
+	      LEFT JOIN users u ON (d.properties->>'assignee_id')::uuid = u.id
+	      LEFT JOIN documents person_doc ON person_doc.workspace_id = d.workspace_id
+	        AND person_doc.document_type = 'person'
+	        AND person_doc.properties->>'user_id' = d.properties->>'assignee_id'
+	      WHERE d.workspace_id = $1 AND d.document_type = 'issue'
+	        AND (d.visibility = 'workspace' OR d.created_by = $2 OR $3 = TRUE)
+	     AND d.archived_at IS NULL AND d.deleted_at IS NULL ORDER BY
+	      CASE d.properties->>'priority'
+	        WHEN 'urgent' THEN 1
+	        WHEN 'high' THEN 2
+	        WHEN 'medium' THEN 3
+	        WHEN 'low' THEN 4
+	        ELSE 5
+	      END,
+	      d.updated_at DESC
+2026-05-19 22:06:36.779 UTC [18304] DETAIL:  parameters: $1 = '477e918b-7d2d-4515-97d5-5ff30d7edc4c', $2 = '254ace7c-ba50-4795-9cf8-fe6bed3e14d6', $3 = 't'
+2026-05-19 22:06:36.787 UTC [18304] LOG:  execute <unnamed>: SELECT da.document_id, da.related_id as id, da.relationship_type as type,
+	            d.title, d.properties->>'color' as color
+	     FROM document_associations da
+	     LEFT JOIN documents d ON da.related_id = d.id
+	     WHERE da.document_id = ANY($1)
+	     ORDER BY da.document_id, da.relationship_type, da.created_at
+2026-05-19 22:06:36.787 UTC [18304] DETAIL:  parameters: $1 = '{cf53ba13-9391-46c5-9e3e-1c92942db01b,eff6de4c-bd05-4abc-8c1b-097aaaac1d8d,a4302b07-30e4-4013-ae7b-6409075cf1c8,7d238825-fb88-4584-afe0-b17216cbc65e,d4167250-973f-40e7-a832-4d50950d60c7,9928ab7c-0958-4a6b-bc51-d6e803215d9d,0f61a59f-f1ef-4f67-ab08-773c7b3b4899,621e8357-d294-4128-b210-f48b006fdb8e,5b562b41-17b3-454c-992e-ef52bab0bd1f,38e6d19a-0b23-47ef-8efa-bf7246bb8d97,37ad365f-e5f1-4198-b6dc-6bbbb1c1cb7c,960ddd38-2a86-4f76-b2e1-537a8e05874b,9ffd3170-a507-4558-a8ca-fc2a8c684d70,2283e623-82d3-47f2-b0e4-90514658c13e,0edb16e7-49db-4292-9fb9-a70540427508,f60c47e3-d7bd-4c85-ad63-5878846d8e2c,4bb8c0ce-78f5-4e3a-9106-3b22e7d85d15,ea750334-5dd1-4684-b940-2e7ad8f37b54,b2a1e0d2-88a6-414f-b696-abe7d4823aae,5344cfc1-6cc4-4857-b6f1-cd23a6fbaf01,14225fbb-64de-4e81-a0b9-687230f953e7,db43b708-f4bc-4e10-b6b3-17483277a11a,d80537d2-cc55-4532-838c-02a3cd7db828,1534b90e-98d6-4f15-838f-bf54db77c673,18195228-2851-42d5-a5d3-4dd7593fd3f0,15d2a927-3cd1-4b9a-ba5d-5cb8f5e5af1a,5d0baa0d-158f-4a29-8be8-a166781e956d,7cb7f6e4-8ebc-4d32-bfce-33fc8505a12e,8af67d2a-82a6-4009-9929-caeca16998a8,23561212-d579-4fe4-ba87-a8fe1d5316fb,1425d984-4a02-4ab4-8dbd-da1c9ca474a6,7d23275a-bb4b-4b61-9351-6e4d068df7bc,619314b3-75e7-461c-91d6-c5146ecb1b55,37f59f1a-2b23-4be1-9fe4-754dc35b66c9,c59ca689-f919-417c-b1d5-5845c5624a32,f9206e5f-777d-4832-89ae-31af6db7708c,df43d262-23c1-4e85-ab9a-e64da1855e31,7bb14c29-68a2-4daf-9586-7f80e4b1b260,ebd5480c-7751-4738-bd92-b07ac88d11d1,02d1900c-1213-409e-bf73-6256c7390658,40a7ca5b-4a36-4758-aa1f-4e2b5aa57bc9,e623ae2e-1441-4e5b-a953-5832f5bc8555,3aacac6c-2e4d-4621-98a3-3d0d1957fb73,afd92eb9-a741-4edf-849c-29cfe2ec3ff0,673f42b6-c00a-4bcb-a5cd-74259adde7c9,d530efba-42d1-4ee7-8b5b-88e0bbaa40a6,1b1fc9c2-52c9-4636-ab83-5f319869a699,1123ea46-4565-4bd0-bbb4-7ef299afbe60,9d1eead5-abd9-41ef-a2e9-d6220c43c858,30995b89-410a-4a36-924f-b8b4d06a02af,93fbd2d7-47b6-466a-bbd5-078fbac1f16d,ccd2d961-60e1-40dc-86ef-848cf279fb33,0e612435-775c-46f0-b76d-7e2ca113ae73,76aa262f-a974-47e2-b899-bbd46f047e13,509ce5e5-8ea2-4e44-b6b3-e7670d72d09f,b3f79549-bd08-4baa-a495-c06705ba08be,14810efc-1020-4dc2-bc71-01d6e4a65bcf,eb2faff0-3460-4dd1-b6f0-7303fb83ae0f,a36011c5-cf2e-48e8-85c6-8b498f42de44,908faf90-883f-4c0e-990f-c728d50f49d6,f9accef5-b8fc-489b-a7f8-0282e91f1e6a,2b08a561-d520-4c32-8346-e9d856eb1e55,a0b5a81e-7e98-465f-8b79-77c63ac9827e,0d4ade34-0929-4b94-812f-f38c7ea3268b,f24fc608-c0f3-4571-a546-761165ee648e,07b10828-3e5a-4eeb-b747-35eaab25ade5,58da8789-fbd2-4d8e-b5cb-b36494e650eb,2d3ee0bf-c0fd-4fbf-aae8-141f839efe96,33b32113-7722-4483-ba46-d7f1c3b5588c,0bf3a35a-7abc-4ddf-9201-15c8c1f5b524,53fe005b-3b16-4e23-b89d-1d8404753cf2,031e864e-d722-4747-887c-f506ab3db41f,c016b17e-bca2-4f5f-ace0-34a9a129b097,8c870763-b0e9-4e9f-9fb5-357bd163b734,be2a099a-496c-42dc-ba63-57d448b2d25e,55fcef40-71c6-441b-881d-9e98950afc17,b720741d-626a-4477-b786-e241a56e644a,488f91a8-4c15-4f84-a2a5-2a48a9c64038,61c1da00-66da-42dc-bf33-623536719a3c,0e951be4-a46a-4d52-8e69-76edd983fac2,a6754c4b-6bd0-4e47-8b7b-2a876a2f5503,36335539-ece8-4534-8c3a-f223386bb943,a332ccd6-b169-48dc-a4b4-46bdb6fff185,3134425f-0d81-41a7-82e6-7108f31a4936,764d9c01-b2d8-4f23-b00d-1aa7d534691a,98748f78-66c1-4018-a9e4-2524b4cd832b,15f0b9aa-981b-4e80-a5b6-e1c52f995b09,8480b0b9-c60e-4e3f-9fb3-ccfce10471bc,713f6beb-923d-4f1a-9c1a-85a0764fc3d9,e0c8cd0e-7860-42a8-9965-5a0006cf422e,bf01bf65-98b3-4671-8084-7ed533abbba0,da662bf8-da4d-4f21-bed0-c8b243d68fab,67355974-17fb-4285-8dec-ebfab45bec30,88ebb5c8-e50b-4e9b-be7d-210c24f03fe1,03893853-03fa-4fda-89b3-e54181c8ab8f,6ba09285-8765-4381-93b4-289486336813,ab112752-2c92-4cec-84c7-bd7f5f0fa398,4cae39f4-f970-459d-9a12-0fd16b1771c9,83219c81-10a2-4c2f-8672-c34b2344dea8,5ff49969-a5da-48f5-be95-6143d6bf643d,593aad13-1850-47ea-97e4-0d3dfa352904,9ae56d2a-ff61-4af7-9a22-8e251da651ce,7f6ad20c-2db0-4260-b27f-8322870c07fa,9c2c9fd2-cce9-4fb6-9278-671fa3902081}'
+2026-05-19 22:06:36.804 UTC [18304] LOG:  execute <unnamed>: SELECT s.id, s.user_id, s.workspace_id, s.expires_at, s.last_activity, s.created_at,
+	              u.is_super_admin
+	       FROM sessions s
+	       JOIN users u ON s.user_id = u.id
+	       WHERE s.id = $1
+2026-05-19 22:06:36.804 UTC [18304] DETAIL:  parameters: $1 = '86a31d9a3a1e8d1c1e0618326167e187d119c75a24b78e10805658abe1c3e57e'
+2026-05-19 22:06:36.806 UTC [18304] LOG:  execute <unnamed>: UPDATE sessions SET last_activity = $1 WHERE id = $2
+2026-05-19 22:06:36.806 UTC [18304] DETAIL:  parameters: $1 = '2026-05-19 22:06:36.805+00', $2 = '86a31d9a3a1e8d1c1e0618326167e187d119c75a24b78e10805658abe1c3e57e'
+2026-05-19 22:06:36.809 UTC [18304] LOG:  execute <unnamed>: SELECT role FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2
+2026-05-19 22:06:36.809 UTC [18304] DETAIL:  parameters: $1 = '477e918b-7d2d-4515-97d5-5ff30d7edc4c', $2 = '254ace7c-ba50-4795-9cf8-fe6bed3e14d6'
+2026-05-19 22:06:36.812 UTC [18304] LOG:  execute <unnamed>: 
+	      SELECT d.id, d.title, d.properties, d.archived_at, d.created_at, d.updated_at,
+	             COALESCE((d.properties->>'owner_id')::uuid, d.created_by) as owner_id,
+	             u.name as owner_name, u.email as owner_email,
+	             (SELECT COUNT(*) FROM documents i
+	              JOIN document_associations da ON da.document_id = i.id AND da.related_id = d.id AND da.relationship_type = 'program'
+	              WHERE i.document_type = 'issue') as issue_count,
+	             (SELECT COUNT(*) FROM documents s
+	              JOIN document_associations da ON da.document_id = s.id AND da.related_id = d.id AND da.relationship_type = 'program'
+	              WHERE s.document_type = 'sprint') as sprint_count
+	      FROM documents d
+	      LEFT JOIN users u ON u.id = COALESCE((d.properties->>'owner_id')::uuid, d.created_by)
+	      WHERE d.workspace_id = $1 AND d.document_type = 'program'
+	        AND (d.visibility = 'workspace' OR d.created_by = $2 OR $3 = TRUE)
+	     AND d.archived_at IS NULL ORDER BY d.created_at DESC
+2026-05-19 22:06:36.812 UTC [18304] DETAIL:  parameters: $1 = '477e918b-7d2d-4515-97d5-5ff30d7edc4c', $2 = '254ace7c-ba50-4795-9cf8-fe6bed3e14d6', $3 = 't'
+2026-05-19 22:06:36.820 UTC [18304] LOG:  execute <unnamed>: SELECT s.id, s.user_id, s.workspace_id, s.expires_at, s.last_activity, s.created_at,
+	              u.is_super_admin
+	       FROM sessions s
+	       JOIN users u ON s.user_id = u.id
+	       WHERE s.id = $1
+2026-05-19 22:06:36.820 UTC [18304] DETAIL:  parameters: $1 = '86a31d9a3a1e8d1c1e0618326167e187d119c75a24b78e10805658abe1c3e57e'
+2026-05-19 22:06:36.821 UTC [18304] LOG:  execute <unnamed>: UPDATE sessions SET last_activity = $1 WHERE id = $2
+2026-05-19 22:06:36.821 UTC [18304] DETAIL:  parameters: $1 = '2026-05-19 22:06:36.821+00', $2 = '86a31d9a3a1e8d1c1e0618326167e187d119c75a24b78e10805658abe1c3e57e'
+2026-05-19 22:06:36.826 UTC [18304] LOG:  execute <unnamed>: SELECT role FROM workspace_memberships WHERE workspace_id = $1 AND user_id = $2
+2026-05-19 22:06:36.826 UTC [18304] DETAIL:  parameters: $1 = '477e918b-7d2d-4515-97d5-5ff30d7edc4c', $2 = '254ace7c-ba50-4795-9cf8-fe6bed3e14d6'
+2026-05-19 22:06:36.827 UTC [18304] LOG:  execute <unnamed>: SELECT sprint_start_date FROM workspaces WHERE id = $1
+2026-05-19 22:06:36.827 UTC [18304] DETAIL:  parameters: $1 = '477e918b-7d2d-4515-97d5-5ff30d7edc4c'
+2026-05-19 22:06:36.833 UTC [18304] LOG:  execute <unnamed>: SELECT d.id, d.title, d.properties, prog_da.related_id as program_id,
+	              p.title as program_name, p.properties->>'prefix' as program_prefix,
+	              p.properties->>'accountable_id' as program_accountable_id,
+	              (SELECT op.properties->>'reports_to' FROM documents op WHERE d.properties->>'owner_id' IS NOT NULL AND op.id = (d.properties->>'owner_id')::uuid AND op.document_type = 'person' AND op.workspace_id = d.workspace_id) as owner_reports_to,
+	              $5::timestamp as workspace_sprint_start_date,
+	              u.id as owner_id, u.name as owner_name, u.email as owner_email,
+	              (SELECT COUNT(*) FROM documents i
+	               JOIN document_associations ida ON ida.document_id = i.id AND ida.related_id = d.id AND ida.relationship_type = 'sprint'
+	               WHERE i.document_type = 'issue') as issue_count,
+	              (SELECT COUNT(*) FROM documents i
+	               JOIN document_associations ida ON ida.document_id = i.id AND ida.related_id = d.id AND ida.relationship_type = 'sprint'
+	               WHERE i.document_type = 'issue' AND i.properties->>'state' = 'done') as completed_count,
+	              (SELECT COUNT(*) FROM documents i
+	               JOIN document_associations ida ON ida.document_id = i.id AND ida.related_id = d.id AND ida.relationship_type = 'sprint'
+	               WHERE i.document_type = 'issue' AND i.properties->>'state' IN ('in_progress', 'in_review')) as started_count,
+	              (SELECT COUNT(*) > 0 FROM documents pl WHERE pl.parent_id = d.id AND pl.document_type = 'weekly_plan') as has_plan,
+	              (SELECT COUNT(*) > 0 FROM documents rt
+	               JOIN document_associations rda ON rda.document_id = rt.id AND rda.related_id = d.id AND rda.relationship_type = 'sprint'
+	               WHERE rt.properties->>'outcome' IS NOT NULL) as has_retro,
+	              (SELECT rt.properties->>'outcome' FROM documents rt
+	               JOIN document_associations rda ON rda.document_id = rt.id AND rda.related_id = d.id AND rda.relationship_type = 'sprint'
+	               WHERE rt.properties->>'outcome' IS NOT NULL LIMIT 1) as retro_outcome,
+	              (SELECT rt.id FROM documents rt
+	               JOIN document_associations rda ON rda.document_id = rt.id AND rda.related_id = d.id AND rda.relationship_type = 'sprint'
+	               WHERE rt.properties->>'outcome' IS NOT NULL LIMIT 1) as retro_id
+	       FROM documents d
+	       LEFT JOIN document_associations prog_da ON prog_da.document_id = d.id AND prog_da.relationship_type = 'program'
+	       LEFT JOIN documents p ON prog_da.related_id = p.id
+	       LEFT JOIN users u ON (d.properties->'assignee_ids'->>0)::uuid = u.id
+	       WHERE d.workspace_id = $1 AND d.document_type = 'sprint'
+	         AND (d.properties->>'sprint_number')::int = $2
+	         AND (d.visibility = 'workspace' OR d.created_by = $3 OR $4 = TRUE)
+	       ORDER BY (d.properties->>'sprint_number')::int, p.title
+2026-05-19 22:06:36.833 UTC [18304] DETAIL:  parameters: $1 = '477e918b-7d2d-4515-97d5-5ff30d7edc4c', $2 = '14', $3 = '254ace7c-ba50-4795-9cf8-fe6bed3e14d6', $4 = 't', $5 = '2026-02-16 00:00:00'
+2026-05-19 22:06:43.884 UTC [62] LOG:  checkpoint starting: time
+2026-05-19 22:06:45.127 UTC [62] LOG:  checkpoint complete: wrote 13 buffers (0.1%); 0 WAL file(s) added, 0 removed, 0 recycled; write=1.209 s, sync=0.016 s, total=1.243 s; sync files=4, longest=0.014 s, average=0.004 s; distance=22 kB, estimate=3100 kB; lsn=0/26BF510, redo lsn=0/26BF4D8

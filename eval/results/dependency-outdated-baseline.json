@@ -1,0 +1,72 @@
+{
+  "@axe-core/playwright": {
+    "current": "4.11.0",
+    "latest": "4.11.3",
+    "wanted": "4.11.0",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies"
+  },
+  "@playwright/test": {
+    "current": "1.57.0",
+    "latest": "1.60.0",
+    "wanted": "1.57.0",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies"
+  },
+  "@vitest/ui": {
+    "current": "4.0.17",
+    "latest": "4.1.6",
+    "wanted": "4.0.17",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies"
+  },
+  "get-port": {
+    "current": "7.1.0",
+    "latest": "7.2.0",
+    "wanted": "7.1.0",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies"
+  },
+  "prettier": {
+    "current": "3.7.4",
+    "latest": "3.8.3",
+    "wanted": "3.7.4",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies"
+  },
+  "vitest": {
+    "current": "4.0.17",
+    "latest": "4.1.6",
+    "wanted": "4.0.17",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies"
+  },
+  "@testcontainers/postgresql": {
+    "current": "11.11.0",
+    "latest": "12.0.0",
+    "wanted": "11.11.0",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies"
+  },
+  "@types/supertest": {
+    "current": "6.0.3",
+    "latest": "7.2.0",
+    "wanted": "6.0.3",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies"
+  },
+  "testcontainers": {
+    "current": "11.11.0",
+    "latest": "12.0.0",
+    "wanted": "11.11.0",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies"
+  },
+  "typescript": {
+    "current": "5.9.3",
+    "latest": "6.0.3",
+    "wanted": "5.9.3",
+    "isDeprecated": false,
+    "dependencyType": "devDependencies"
+  }
+}

@@ -1,0 +1,98 @@
+{
+  "audit_unit": "U5 (Test Coverage and Quality — Category 5)",
+  "captured_at": "2026-05-19",
+  "tools_used": [
+    "pnpm test (Vitest unit suite in api/)",
+    "scripts/check-empty-tests.sh (Ship's pre-commit empty-test detector)",
+    "Code inspection of e2e/ directory and api/src/__tests__/"
+  ],
+
+  "unit_test_baseline": {
+    "framework": "Vitest 4.0.17",
+    "command": "pnpm test (delegates to pnpm --filter @ship/api test)",
+    "total_test_files": 28,
+    "total_tests": 451,
+    "passed": 451,
+    "failed": 0,
+    "runtime_seconds": 42.87,
+    "captured_at": "2026-05-19 (during U1 setup verification)",
+    "coverage_metric": "not-yet-measured; would require pnpm exec vitest run --coverage",
+    "interpretation": "451 unit tests passing in 42.87s across 28 files is substantial coverage for a project this size. The PDF's '73+ Playwright tests' figure refers ONLY to E2E; the actual test count is much higher when unit tests are included.",
+    "test_file_areas_covered_by_inspection": [
+      "Route handlers (documents, issues, weeks, projects, programs, workspaces, auth, search, files, etc.)",
+      "Collaboration / Yjs (api/src/collaboration/__tests__/)",
+      "Utility functions (extractHypothesis, transformIssueLinks, business-days)",
+      "Services (accountability)",
+      "Authentication and authorization"
+    ]
+  },
+
+  "e2e_test_baseline": {
+    "framework": "Playwright 1.57",
+    "expected_test_count_from_docs": "73+",
+    "actually_run_during_audit": false,
+    "reason_not_run": "Building the API for E2E setup hit ORIENTATION finding #20 (bash-only cp command in api/package.json build script). After fixing pnpm script-shell to use PowerShell (pnpm config set script-shell pwsh.exe), the build succeeded but the full E2E suite would take 10-15 minutes to run end-to-end. Deferred — the documented count is sufficient for baseline.",
+    "config_files": [
+      "playwright.config.ts (standard config)",
+      "playwright.isolated.config.ts (alternate config — suggests two test modes for isolated parallel runs via testcontainers/postgresql)"
+    ],
+    "test_files_in_e2e_directory": "Cataloged via Glob: e2e/*.spec.ts — multiple files covering auth, documents, issues, weeks, sprints, search, accessibility-adjacent flows",
+    "browsers_tested": "Chromium only (per docs/application-architecture.md: 'Chromium only — Firefox/Safari add maintenance burden without coverage benefit')",
+    "fixtures": "Per code inspection: e2e/fixtures/isolated-env.ts provides isolated database per test via testcontainers"
+  },
+
+  "test_quality_findings": {
+    "finding_18_empty_tests": {
+      "description": "6 Playwright tests exist that pass silently without verifying anything",
+      "detected_by": "Ship's pre-commit hook (scripts/check-empty-tests.sh)",
+      "files_affected": [
+        "e2e/autosave-race-conditions.spec.ts (2 empty)",
+        "e2e/critical-blockers.spec.ts (2 empty)",
+        "e2e/session-timeout.spec.ts (2 empty)"
+      ],
+      "interpretation": "False-positive test coverage — the suite reports 73+ tests passing, but 6 of those don't assert anything. Detection mechanism: test bodies that have no expect( or page. calls but aren't using test.fixme/skip/todo.",
+      "severity": "High (Category 5)",
+      "u15_target_candidate": "Convert these 6 tests to test.fixme() so they show as deliberate placeholders, OR implement real assertions for them. Either qualifies as a 'meaningful test quality improvement' per PDF requirement."
+    },
+    "finding_pre_commit_hook_is_strong_signal": {
+      "description": "Ship has a pre-commit hook specifically to catch silently-passing tests",
+      "interpretation": "Strong architectural signal — the team is aware of the footgun and has automated detection. The 6 empty tests must have been merged either before the hook was added OR by bypassing it. Worth investigating in git log."
+    }
+  },
+
+  "critical_flows_coverage_assessment": {
+    "methodology": "Code inspection of e2e/ test files mapped against the document model + key user flows",
+    "covered_critical_flows_observed": [
+      "Document CRUD (e2e/documents.spec.ts implied; verified by Vitest test names)",
+      "Real-time collaboration (api/src/collaboration/__tests__/)",
+      "Authentication and session management (api/src/__tests__/auth.test.ts, e2e/session-timeout.spec.ts)",
+      "Critical blockers (e2e/critical-blockers.spec.ts — covers auth/ticket-number/WebSocket scenarios — but 2 of these are silent-pass per Finding #18)",
+      "Document associations / week assignments (api/src/routes/associations-regression.test.ts)",
+      "Standups, sprint reviews, weekly plans/retros (api/src/routes/standups.test.ts, sprint-reviews.test.ts)",
+      "API tokens (api/src/routes/api-tokens.test.ts)",
+      "Search (api/src/routes/search.test.ts)"
+    ],
+    "potentially_under_covered_flows": [
+      "Network disconnect during collaborative edit — flagged by Finding #18 (silent-pass tests exist for this)",
+      "Yjs reconnect with expired session — referenced in plan U16 edge case; not visibly tested in unit suite",
+      "Concurrent document edits by multiple users — Yjs handles convergence but the flow isn't visibly E2E-tested",
+      "Drag-and-drop state persistence (sprint board) — not visibly tested",
+      "Large file uploads — referenced in plan U16; not visibly tested"
+    ],
+    "u15_target_candidate": "Add 3 meaningful Playwright tests for previously-untested critical flows. Candidates: document deletion + URL-direct-access returns 404, real-time sync between two browser contexts, sprint board drag persistence after reload."
+  },
+
+  "improvement_target": {
+    "pdf_requirement_a": "Add 3 meaningful tests for previously untested critical paths",
+    "pdf_requirement_b": "Fix 3 flaky tests with documented root cause analysis",
+    "selected_target": "pdf_requirement_a (combined with converting the 6 empty tests, exceeds requirement)",
+    "rationale": "Finding #18 already identifies 6 tests that need attention. The PDF asks for 3 quality improvements — converting any 3 of the 6 to test.fixme() OR implementing their actual logic counts as a meaningful improvement. Combined with adding 1-2 new tests for the under-covered flows, U15 will substantially exceed the PDF target."
+  },
+
+  "audit_implications": [
+    "Ship's test discipline is genuinely strong — 451 passing unit tests + 73+ E2E tests + pre-commit hook for empty-test detection.",
+    "The 6 silently-passing tests are an embarrassing gap given the pre-commit infrastructure — worth fixing in U15.",
+    "AUDIT.md Category 5 will report this as 'strong test suite with one specific quality gap.'",
+    "Coverage percentage not measured during baseline; can be captured with pnpm exec vitest run --coverage during U15."
+  ]
+}

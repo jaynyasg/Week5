@@ -1,0 +1,64 @@
+services:
+  - type: web
+    name: ship
+    runtime: node
+    plan: starter
+    buildCommand: corepack enable && corepack prepare pnpm@10.27.0 --activate && pnpm install --frozen-lockfile --prod=false && pnpm build
+    startCommand: node api/dist/db/migrate.js && node api/dist/index.js
+    healthCheckPath: /health
+    envVars:
+      - key: NODE_VERSION
+        value: 20.19.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ship-db
+          property: connectionString
+      - key: SESSION_SECRET
+        generateValue: true
+      - key: RENDER_API_KEY
+        sync: false
+      - key: RENDER_SECURITY_PROBE_CRON_JOB_ID
+        sync: false
+      - key: SHIP_ASSISTANT_ENABLED
+        value: "true"
+      - key: SHIP_ASSISTANT_PROVIDER
+        value: openai
+      - key: SHIP_ASSISTANT_MODEL
+        value: gpt-4o-mini
+      - key: SHIP_ASSISTANT_EMBEDDINGS_ENABLED
+        value: "true"
+      - key: SHIP_ASSISTANT_EMBEDDING_MODEL
+        value: text-embedding-3-small
+      - key: SHIP_ASSISTANT_EMBEDDING_DIMENSIONS
+        value: "1536"
+      - key: SHIP_ASSISTANT_TRACING_ENABLED
+        value: "true"
+      - key: SHIP_ASSISTANT_UPLOAD_INDEXING
+        value: "true"
+      - key: SHIP_UPLOAD_STORAGE
+        value: local
+      - key: OPENAI_API_KEY
+        sync: false
+
+  - type: cron
+    name: ship-security-probe
+    runtime: node
+    plan: starter
+    schedule: '0 8 1 * *'
+    buildCommand: corepack enable && corepack prepare pnpm@10.27.0 --activate && pnpm install --frozen-lockfile --prod=false && pnpm build:api
+    startCommand: node scripts/render-security-probe.mjs
+    envVars:
+      - key: NODE_VERSION
+        value: 20.19.0
+      - key: SHIP_SECURITY_HOSTPORT
+        fromService:
+          name: ship
+          type: web
+          property: hostport
+      - key: SHIP_SECURITY_REPORT_NAME
+        value: security-audit-render
+
+databases:
+  - name: ship-db
+    databaseName: ship
+    user: ship

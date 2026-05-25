@@ -1,0 +1,13 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "rootDir": "./src",
+    "outDir": "./dist",
+    "paths": {
+      "@ship/shared": ["../shared/dist"],
+      "@ship/shared/*": ["../shared/dist/*"]
+    }
+  },
+  "include": ["src/**/*"],
+  "exclude": ["src/test/**/*"]
+}

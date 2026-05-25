@@ -1,0 +1,507 @@
+{
+  "schemaVersion": 1,
+  "run": {
+    "id": "b266994e-0052-4e73-990e-b41e6170a751",
+    "startedAt": "2026-05-22T20:54:57.275Z",
+    "finishedAt": "2026-05-22T20:54:58.937Z",
+    "mode": "local",
+    "webUrl": "http://localhost:5173",
+    "apiUrl": "http://localhost:3000",
+    "reportName": "security-audit-baseline",
+    "nonInteractive": true
+  },
+  "credentials": {
+    "defaultAttempted": true,
+    "primaryEmail": "dev@ship.local",
+    "primarySource": "default",
+    "secondaryProvided": false
+  },
+  "summary": {
+    "totalFindings": 0,
+    "findingsByStatus": {
+      "pass": 18,
+      "finding": 0,
+      "inconclusive": 0,
+      "error": 0,
+      "not_run_credentials_required": 5,
+      "not_run_secondary_credentials_required": 1,
+      "not_run_target_unavailable": 0,
+      "not_run_safety_limit": 0
+    },
+    "findingsBySeverity": {
+      "critical": 0,
+      "high": 0,
+      "medium": 0,
+      "low": 0,
+      "info": 24
+    }
+  },
+  "findings": [
+    {
+      "id": "tool-runnable",
+      "metric": "security_probe_tool",
+      "surface": "tool",
+      "status": "pass",
+      "severity": "info",
+      "title": "Security probe command executed",
+      "description": "The Category 8 security probe CLI started and produced a report artifact.",
+      "reproduction": [
+        "Run the documented security audit command from the repository root.",
+        "Confirm JSON and Markdown reports are written to the configured output directory."
+      ],
+      "evidence": {
+        "mode": "local",
+        "webUrl": "http://localhost:5173",
+        "apiUrl": "http://localhost:3000",
+        "reportName": "security-audit-baseline"
+      }
+    },
+    {
+      "id": "auth-unauth-documents-list",
+      "metric": "auth_session_vulnerabilities",
+      "surface": "auth_session",
+      "status": "pass",
+      "severity": "info",
+      "title": "Unauthenticated GET /api/documents denied unauthenticated access",
+      "description": "The protected route did not return protected data without authentication.",
+      "reproduction": [
+        "Request http://localhost:3000/api/documents without a session cookie or bearer token."
+      ],
+      "evidence": {
+        "status": 401,
+        "body": "{\"success\":false,\"error\":{\"code\":\"UNAUTHORIZED\",\"message\":\"No session found\"}}"
+      }
+    },
+    {
+      "id": "auth-unauth-documents-create",
+      "metric": "auth_session_vulnerabilities",
+      "surface": "auth_session",
+      "status": "pass",
+      "severity": "info",
+      "title": "Unauthenticated POST /api/documents denied unauthenticated access",
+      "description": "The protected route did not return protected data without authentication.",
+      "reproduction": [
+        "Request http://localhost:3000/api/documents without a session cookie or bearer token."
+      ],
+      "evidence": {
+        "status": 403,
+        "body": "{\"error\":{\"code\":\"REQUEST_ERROR\",\"message\":\"invalid csrf token\"}}"
+      }
+    },
+    {
+      "id": "auth-unauth-auth-me",
+      "metric": "auth_session_vulnerabilities",
+      "surface": "auth_session",
+      "status": "pass",
+      "severity": "info",
+      "title": "Unauthenticated GET /api/auth/me denied unauthenticated access",
+      "description": "The protected route did not return protected data without authentication.",
+      "reproduction": [
+        "Request http://localhost:3000/api/auth/me without a session cookie or bearer token."
+      ],
+      "evidence": {
+        "status": 401,
+        "body": "{\"success\":false,\"error\":{\"code\":\"UNAUTHORIZED\",\"message\":\"No session found\"}}"
+      }
+    },
+    {
+      "id": "auth-unauth-admin-workspaces",
+      "metric": "auth_session_vulnerabilities",
+      "surface": "auth_session",
+      "status": "pass",
+      "severity": "info",
+      "title": "Unauthenticated GET /api/admin/workspaces denied unauthenticated access",
+      "description": "The protected route did not return protected data without authentication.",
+      "reproduction": [
+        "Request http://localhost:3000/api/admin/workspaces without a session cookie or bearer token."
+      ],
+      "evidence": {
+        "status": 401,
+        "body": "{\"success\":false,\"error\":{\"code\":\"UNAUTHORIZED\",\"message\":\"No session found\"}}"
+      }
+    },
+    {
+      "id": "auth-malformed-session",
+      "metric": "auth_session_vulnerabilities",
+      "surface": "auth_session",
+      "status": "pass",
+      "severity": "info",
+      "title": "Malformed session cookie denied unauthenticated access",
+      "description": "The protected route did not return protected data without authentication.",
+      "reproduction": [
+        "Request http://localhost:3000/api/auth/me without a session cookie or bearer token."
+      ],
+      "evidence": {
+        "status": 401,
+        "body": "{\"success\":false,\"error\":{\"code\":\"UNAUTHORIZED\",\"message\":\"Invalid session\"}}"
+      }
+    },
+    {
+      "id": "auth-malformed-bearer",
+      "metric": "auth_session_vulnerabilities",
+      "surface": "auth_session",
+      "status": "pass",
+      "severity": "info",
+      "title": "Malformed bearer token denied unauthenticated access",
+      "description": "The protected route did not return protected data without authentication.",
+      "reproduction": [
+        "Request http://localhost:3000/api/auth/me without a session cookie or bearer token."
+      ],
+      "evidence": {
+        "status": 401,
+        "body": "{\"success\":false,\"error\":{\"code\":\"UNAUTHORIZED\",\"message\":\"Invalid or expired API token\"}}"
+      }
+    },
+    {
+      "id": "auth-login-primary",
+      "metric": "auth_session_vulnerabilities",
+      "surface": "auth_session",
+      "status": "not_run_credentials_required",
+      "severity": "info",
+      "title": "Primary credentials failed",
+      "description": "The probe attempted the primary credential pair to unlock authenticated checks.",
+      "reproduction": [
+        "Fetch CSRF token.",
+        "POST /api/auth/login as dev@ship.local."
+      ],
+      "evidence": {
+        "status": 401,
+        "success": false,
+        "credentialSource": "default"
+      }
+    },
+    {
+      "id": "auth-missing-csrf",
+      "metric": "auth_session_vulnerabilities",
+      "surface": "auth_session",
+      "status": "not_run_credentials_required",
+      "severity": "info",
+      "title": "Missing CSRF enforcement check requires login.",
+      "description": "Authenticated probe could not run because usable credentials were unavailable.",
+      "reproduction": [
+        "Provide valid credentials and rerun the probe."
+      ],
+      "evidence": {}
+    },
+    {
+      "id": "auth-role-boundary-secondary",
+      "metric": "auth_session_vulnerabilities",
+      "surface": "auth_session",
+      "status": "not_run_secondary_credentials_required",
+      "severity": "info",
+      "title": "Role-boundary probe requires secondary credentials",
+      "description": "No secondary credential pair was provided for privilege-escalation checks.",
+      "reproduction": [
+        "Provide SHIP_SECURITY_ALT_EMAIL and SHIP_SECURITY_ALT_PASSWORD, or --alt-email and --alt-password."
+      ],
+      "evidence": {
+        "secondaryProvided": false
+      }
+    },
+    {
+      "id": "input-login-payloads",
+      "metric": "input_sanitization_failures",
+      "surface": "input_sanitization",
+      "status": "pass",
+      "severity": "info",
+      "title": "Login rejects XSS and SQLi-like payloads safely",
+      "description": "The adversarial input was rejected or not reflected in an executable response context.",
+      "reproduction": [
+        "POST /api/auth/login with XSS marker email and SQLi-like password."
+      ],
+      "evidence": {
+        "status": 401,
+        "contentType": "application/json; charset=utf-8",
+        "reflectedPayloads": [],
+        "body": "{\"success\":false,\"error\":{\"code\":\"INVALID_CREDENTIALS\",\"message\":\"Invalid email or password\"}}"
+      }
+    },
+    {
+      "id": "input-public-feedback-program-id",
+      "metric": "input_sanitization_failures",
+      "surface": "input_sanitization",
+      "status": "pass",
+      "severity": "info",
+      "title": "Public feedback program lookup handles malformed ID safely",
+      "description": "The adversarial input was rejected or not reflected in an executable response context.",
+      "reproduction": [
+        "GET /api/feedback/program/<event-handler-payload>."
+      ],
+      "evidence": {
+        "status": 404,
+        "contentType": "application/json; charset=utf-8",
+        "reflectedPayloads": [],
+        "body": "{\"error\":\"Program not found\"}"
+      }
+    },
+    {
+      "id": "input-authenticated-write-probes",
+      "metric": "input_sanitization_failures",
+      "surface": "input_sanitization",
+      "status": "not_run_credentials_required",
+      "severity": "info",
+      "title": "Authenticated input write probes require login.",
+      "description": "Authenticated input probe could not run because usable credentials were unavailable.",
+      "reproduction": [
+        "Provide valid credentials and rerun the probe."
+      ],
+      "evidence": {}
+    },
+    {
+      "id": "dependency-high-critical-cves",
+      "metric": "high_critical_cves",
+      "surface": "dependency_cve",
+      "status": "pass",
+      "severity": "info",
+      "title": "No high or critical dependency CVEs found",
+      "description": "The probe parsed pnpm audit JSON and counted high/critical advisories.",
+      "reproduction": [
+        "Run pnpm audit --json from the repository root."
+      ],
+      "evidence": {
+        "counts": {
+          "critical": 0,
+          "high": 0
+        },
+        "advisories": [],
+        "rawExitStatus": 1
+      }
+    },
+    {
+      "id": "cors-csp-cors",
+      "metric": "cors_csp_misconfiguration",
+      "surface": "cors_csp",
+      "status": "pass",
+      "severity": "info",
+      "title": "CORS did not allow untrusted credentialed origin",
+      "description": "The probe sent an untrusted Origin preflight and inspected CORS response headers.",
+      "reproduction": [
+        "Send OPTIONS /api/auth/me with Origin: https://ship-security-probe.invalid.",
+        "Inspect Access-Control-Allow-Origin and Access-Control-Allow-Credentials."
+      ],
+      "evidence": {
+        "status": 204,
+        "allowOrigin": "http://localhost:5173",
+        "allowCredentials": "true"
+      }
+    },
+    {
+      "id": "cors-csp-api-csp",
+      "metric": "cors_csp_misconfiguration",
+      "surface": "cors_csp",
+      "status": "pass",
+      "severity": "info",
+      "title": "API Content Security Policy header present",
+      "description": "The target response included a Content-Security-Policy header.",
+      "reproduction": [
+        "GET http://localhost:3000/health.",
+        "Inspect the Content-Security-Policy response header."
+      ],
+      "evidence": {
+        "status": 200,
+        "csp": "default-src 'self';script-src 'self' 'unsafe-inline';style-src 'self' 'unsafe-inline';img-src 'self' data: blob: https:;connect-src 'self' wss: ws:;font-src 'self' data:;object-src 'none';frame-src 'none';base-uri 'self';form-action 'self';frame-ancestors 'self';script-src-attr 'none';upgrade-insecure-requests",
+        "hasUnsafeInline": true,
+        "localDevTolerated": false
+      }
+    },
+    {
+      "id": "cors-csp-web-csp",
+      "metric": "cors_csp_misconfiguration",
+      "surface": "cors_csp",
+      "status": "pass",
+      "severity": "info",
+      "title": "Web Content Security Policy header missing on local dev target (tolerated)",
+      "description": "The local Vite development target did not include a Content-Security-Policy header; deployed targets are still treated as findings.",
+      "reproduction": [
+        "GET http://localhost:5173.",
+        "Inspect the Content-Security-Policy response header."
+      ],
+      "evidence": {
+        "status": 200,
+        "hasUnsafeInline": false,
+        "localDevTolerated": true
+      }
+    },
+    {
+      "id": "secrets-common-paths",
+      "metric": "secrets_exposure_risk",
+      "surface": "secrets",
+      "status": "pass",
+      "severity": "info",
+      "title": "No secret-like values on common paths",
+      "description": "The probe requested common accidental exposure paths and searched for secret-like values.",
+      "reproduction": [
+        "GET http://localhost:5173/.env.",
+        "GET http://localhost:3000/.env.",
+        "GET http://localhost:3000/api/.env.",
+        "GET http://localhost:5173/config.json."
+      ],
+      "evidence": {
+        "checked": [
+          {
+            "url": "http://localhost:5173/.env",
+            "status": 403
+          },
+          {
+            "url": "http://localhost:3000/.env",
+            "status": 404
+          },
+          {
+            "url": "http://localhost:3000/api/.env",
+            "status": 404
+          },
+          {
+            "url": "http://localhost:5173/config.json",
+            "status": 200
+          }
+        ],
+        "exposures": []
+      }
+    },
+    {
+      "id": "rate-limit-coverage-review",
+      "metric": "rate_limiting_absent",
+      "surface": "rate_limiting",
+      "status": "pass",
+      "severity": "info",
+      "title": "API and WebSocket rate limiting coverage present by code review",
+      "description": "Manual review found global API, login, WebSocket connection, and WebSocket message limiters wired in application code.",
+      "reproduction": [
+        "Review api/src/app.ts for loginLimiter and apiLimiter.",
+        "Review api/src/collaboration/index.ts for connection and message rate limits."
+      ],
+      "evidence": {
+        "apiLimiter": "api/src/app.ts app.use(/api/, apiLimiter)",
+        "loginLimiter": "api/src/app.ts app.use(/api/auth/login, loginLimiter)",
+        "websocketLimits": "api/src/collaboration/index.ts RATE_LIMIT",
+        "absentEndpoints": []
+      }
+    },
+    {
+      "id": "verbose-error-malformed-json",
+      "metric": "verbose_error_leakage",
+      "surface": "verbose_errors",
+      "status": "pass",
+      "severity": "info",
+      "title": "Malformed JSON did not leak verbose internals",
+      "description": "The probe sent malformed JSON and inspected the response for stack traces, SQL, paths, or secret names.",
+      "reproduction": [
+        "POST malformed JSON to /api/auth/login."
+      ],
+      "evidence": {
+        "status": 400,
+        "leaks": [],
+        "body": "{\"error\":{\"code\":\"REQUEST_ERROR\",\"message\":\"Invalid JSON body\"}}"
+      }
+    },
+    {
+      "id": "ws-unauth-events",
+      "metric": "websocket_validation_failures",
+      "surface": "websocket",
+      "status": "pass",
+      "severity": "info",
+      "title": "Unauthenticated /events WebSocket upgrade rejected",
+      "description": "The WebSocket endpoint rejected an unauthenticated upgrade request.",
+      "reproduction": [
+        "Open ws://localhost:3000/events without a session cookie."
+      ],
+      "evidence": {
+        "url": "ws://localhost:3000/events",
+        "opened": false,
+        "httpStatus": 401,
+        "messages": []
+      }
+    },
+    {
+      "id": "ws-unauth-collaboration",
+      "metric": "websocket_validation_failures",
+      "surface": "websocket",
+      "status": "pass",
+      "severity": "info",
+      "title": "Unauthenticated collaboration WebSocket upgrade rejected",
+      "description": "The WebSocket endpoint rejected an unauthenticated upgrade request.",
+      "reproduction": [
+        "Open ws://localhost:3000/collaboration/wiki:00000000-0000-4000-8000-000000000000 without a session cookie."
+      ],
+      "evidence": {
+        "url": "ws://localhost:3000/collaboration/wiki:00000000-0000-4000-8000-000000000000",
+        "opened": false,
+        "httpStatus": 401,
+        "messages": []
+      }
+    },
+    {
+      "id": "ws-auth-events",
+      "metric": "websocket_validation_failures",
+      "surface": "websocket",
+      "status": "not_run_credentials_required",
+      "severity": "info",
+      "title": "Authenticated /events WebSocket checks require login.",
+      "description": "Authenticated WebSocket probe could not run because usable credentials were unavailable.",
+      "reproduction": [
+        "Provide valid credentials and rerun the probe."
+      ],
+      "evidence": {}
+    },
+    {
+      "id": "ws-auth-collaboration",
+      "metric": "websocket_validation_failures",
+      "surface": "websocket",
+      "status": "not_run_credentials_required",
+      "severity": "info",
+      "title": "Authenticated collaboration checks require login.",
+      "description": "Authenticated WebSocket probe could not run because usable credentials were unavailable.",
+      "reproduction": [
+        "Provide valid credentials and rerun the probe."
+      ],
+      "evidence": {}
+    }
+  ],
+  "auditMatrix": [
+    {
+      "metric": "Security probe tool",
+      "baseline": "Runnable (Yes)",
+      "source": "Probe command and report metadata"
+    },
+    {
+      "metric": "Auth/session vulnerabilities found",
+      "baseline": "No verified vulnerabilities found",
+      "source": "Auth/session probes plus manual review"
+    },
+    {
+      "metric": "WebSocket validation failures",
+      "baseline": "No verified vulnerabilities found",
+      "source": "WebSocket probes"
+    },
+    {
+      "metric": "Input sanitization failures",
+      "baseline": "No verified vulnerabilities found",
+      "source": "Input probes plus browser/security test evidence when relevant"
+    },
+    {
+      "metric": "High/Critical CVEs in dependencies",
+      "baseline": "No verified vulnerabilities found",
+      "source": "Parsed dependency audit"
+    },
+    {
+      "metric": "CORS/CSP misconfiguration",
+      "baseline": "No verified vulnerabilities found",
+      "source": "Header probes plus manual review"
+    },
+    {
+      "metric": "Secrets exposure risk",
+      "baseline": "No verified vulnerabilities found",
+      "source": "Common-path/client-bundle checks plus manual review"
+    },
+    {
+      "metric": "Rate limiting absent on endpoints",
+      "baseline": "No verified vulnerabilities found",
+      "source": "Live bounded probes plus route/middleware review"
+    },
+    {
+      "metric": "Verbose error leakage",
+      "baseline": "No verified vulnerabilities found",
+      "source": "Error probes plus error-handler review"
+    }
+  ]
+}

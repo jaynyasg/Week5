@@ -1,0 +1,39 @@
+# Dependencies
+node_modules
+**/node_modules
+
+# Build artifacts (but NOT api/dist and shared/dist which are needed)
+!api/dist
+!shared/dist
+*.tsbuildinfo
+**/*.tsbuildinfo
+
+# Development files
+.git
+.gitignore
+.env*
+*.md
+README.md
+docs
+.vscode
+.idea
+
+# Test files
+*.test.ts
+*.spec.ts
+__tests__
+coverage
+
+# Frontend build artifacts - source needed for local dev, but not prod API image
+web/node_modules
+web/dist
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# OS files
+.DS_Store
+Thumbs.db
