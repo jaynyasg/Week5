@@ -163,12 +163,11 @@ Initial endpoints:
 - `POST /api/fleetgraph/chat`
 - `GET /api/fleetgraph/findings`
 - `GET /api/fleetgraph/findings/:id`
-- `POST /api/fleetgraph/findings/:id/read`
-- `POST /api/fleetgraph/findings/:id/snooze`
-- `POST /api/fleetgraph/findings/:id/dismiss`
+- `PATCH /api/fleetgraph/deliveries/:id`
 - `GET /api/fleetgraph/runs/:id`
-- `POST /api/fleetgraph/actions/:id/approve`
-- `POST /api/fleetgraph/actions/:id/reject`
+- `POST /api/fleetgraph/actions/:id/decision`
+
+Implemented delivery updates use one delivery-scoped route with `status` values of `read`, `dismissed`, or `snoozed`; `snoozed` requires `snoozedUntil`. Implemented action decisions use one proposal-scoped route with `status` values of `approved` or `rejected` plus an optional note.
 
 ## Shared Types Plan
 
@@ -212,7 +211,7 @@ Every FleetGraph route must have:
 
 Verification:
 
-- API test confirms OpenAPI JSON includes `/fleetgraph/status`, `/fleetgraph/chat`, `/fleetgraph/findings`, and action proposal paths.
+- API test confirms OpenAPI JSON includes `/fleetgraph/status`, `/fleetgraph/chat`, `/fleetgraph/findings`, `/fleetgraph/deliveries/{id}`, `/fleetgraph/runs/{id}`, and `/fleetgraph/actions/{id}/decision`.
 
 ## Realtime Plan
 
@@ -250,4 +249,3 @@ Payload shape:
 - Delivery visibility is user-scoped.
 - Action approval does not bypass existing Ship auth rules.
 - Realtime event payloads do not include full finding body or trace internals.
-

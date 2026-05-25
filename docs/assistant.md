@@ -115,6 +115,22 @@ POST /api/files/:fileId/reindex
 
 The current Render demo path uses `SHIP_UPLOAD_STORAGE=local`. That is enough to demonstrate upload-backed answers, but files are not durable across instance rebuilds unless a persistent disk or object storage is configured. For durable production uploads, configure S3/object storage and CDN settings instead.
 
+## FleetGraph Mode
+
+FleetGraph shares the Ask Ship drawer shell but has a separate API, state model, and transcript. Its authenticated endpoints live under `/api/fleetgraph`:
+
+```bash
+GET /api/fleetgraph/status
+POST /api/fleetgraph/chat
+GET /api/fleetgraph/findings
+GET /api/fleetgraph/findings/:id
+PATCH /api/fleetgraph/deliveries/:id
+GET /api/fleetgraph/runs/:id
+POST /api/fleetgraph/actions/:id/decision
+```
+
+FleetGraph configuration uses `SHIP_FLEETGRAPH_*` variables. The Render Blueprint also declares `LANGSMITH_PROJECT` and `LANGSMITH_API_KEY` for trace evidence. FleetGraph notifications reuse the existing `/events` channel with the `fleetgraph:finding-delivered` event type, so no new browser WebSocket endpoint is required.
+
 ## Demo Flow
 
 1. Open a project, timeline, issue, or wiki document.

@@ -82,12 +82,9 @@ Cover:
 - `POST /api/fleetgraph/chat`
 - `GET /api/fleetgraph/findings`
 - `GET /api/fleetgraph/findings/:id`
-- `POST /api/fleetgraph/findings/:id/read`
-- `POST /api/fleetgraph/findings/:id/snooze`
-- `POST /api/fleetgraph/findings/:id/dismiss`
+- `PATCH /api/fleetgraph/deliveries/:id`
 - `GET /api/fleetgraph/runs/:id`
-- `POST /api/fleetgraph/actions/:id/approve`
-- `POST /api/fleetgraph/actions/:id/reject`
+- `POST /api/fleetgraph/actions/:id/decision`
 
 Assertions:
 
@@ -205,3 +202,23 @@ pnpm build
 | Cost per run | `fleetgraph_runs` + provider metadata | Planned |
 | Public deployment | Render URL | TBD |
 
+## Implementation Validation Snapshot
+
+Last implementation pass: 2026-05-25.
+
+Completed locally:
+
+- `pnpm type-check`
+- `pnpm build:api`
+- `pnpm build:web`
+- `pnpm --filter @ship/web exec vitest run src/hooks/useFleetGraph.test.tsx src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx`
+- `git diff --check`
+- pre-commit empty-test check
+
+Blocked locally:
+
+- Focused API FleetGraph tests and DB-backed migration/service tests require local PostgreSQL. The last attempt failed during test setup with `ECONNREFUSED` on `localhost:5432`, before FleetGraph assertions ran.
+
+Intentional placeholder:
+
+- `e2e/fleetgraph.spec.ts` currently uses `test.fixme()` until deterministic FleetGraph seed data is added to `e2e/fixtures/isolated-env.ts`.

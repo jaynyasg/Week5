@@ -143,11 +143,11 @@ Backend endpoints should be separate from Ask Ship:
 - `POST /api/fleetgraph/chat`
 - `GET /api/fleetgraph/findings`
 - `GET /api/fleetgraph/findings/:id`
-- `POST /api/fleetgraph/findings/:id/read`
-- `POST /api/fleetgraph/findings/:id/snooze`
+- `PATCH /api/fleetgraph/deliveries/:id`
 - `GET /api/fleetgraph/runs/:id`
-- `POST /api/fleetgraph/actions/:id/approve`
-- `POST /api/fleetgraph/actions/:id/reject`
+- `POST /api/fleetgraph/actions/:id/decision`
+
+Delivery updates accept `read`, `dismissed`, or `snoozed` status. Snoozed deliveries require `snoozedUntil`. Action decisions accept `approved` or `rejected` status plus an optional note.
 
 All routes must be registered with OpenAPI following Ship's route/schema pattern.
 
@@ -444,7 +444,7 @@ FleetGraph uses LangGraph interrupts for approval gates. The UI shows:
 - LangSmith trace link.
 - Approve, reject, snooze, and dismiss controls.
 
-Approve and reject actions go through authenticated `/api/fleetgraph/actions/:id/*` endpoints. Those endpoints must enforce the same authorization rules as the underlying Ship operation.
+Approve and reject actions go through authenticated `POST /api/fleetgraph/actions/:id/decision`. The endpoint must enforce the same authorization rules as the underlying Ship operation before any real mutation is executed.
 
 ## Observability
 
@@ -496,6 +496,32 @@ Required implementation tests:
 - Accessibility checks for keyboard navigation, focus order, live regions, and contrast in the FleetGraph drawer.
 - Mobile viewport check for full-screen drawer behavior and composer/toast overlap.
 - Trace validation with at least two shared LangSmith links before submission.
+
+### Current Implementation Validation
+
+Last checked: 2026-05-25.
+
+Passing local checks:
+
+- `pnpm type-check`
+- `pnpm build:api`
+- `pnpm build:web`
+- focused FleetGraph web hook and drawer tests
+- `git diff --check`
+- pre-commit empty-test check
+
+Blocked until local PostgreSQL is running:
+
+- focused FleetGraph API route tests
+- DB-backed migration/service verification
+
+Pending final submission evidence:
+
+- deterministic E2E seed data for proactive, on-demand, and HITL paths
+- timed event-to-finding run under 5 minutes
+- at least two reviewed LangSmith trace links
+- cost table from real `fleetgraph_runs` data
+- deployed URL validation
 
 ## Implementation Tasks
 

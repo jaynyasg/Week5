@@ -31,7 +31,8 @@ Although the frontend is still a static React/Vite build, the Render deployment 
    - Database: `ship-db`
 3. Let Render create `SESSION_SECRET` and inject `DATABASE_URL` from the managed database.
 4. Add `OPENAI_API_KEY` to the `ship` web service if Ask Ship should be available in the deployed app.
-5. Deploy the Blueprint.
+5. Add `LANGSMITH_API_KEY` to the `ship` web service if FleetGraph traces should be captured for submission evidence.
+6. Deploy the Blueprint.
 
 The web service should use Render's default `PORT` environment variable. Render also provides `RENDER_EXTERNAL_URL`; the API uses that value for same-origin production defaults when AWS SSM parameters are not present.
 
@@ -47,6 +48,22 @@ The Blueprint declares Ask Ship assistant defaults:
 | `OPENAI_API_KEY` | Add manually in Render; declared with `sync: false` |
 
 `SHIP_UPLOAD_STORAGE=local` is the current demo path for upload-backed Ask Ship answers on Render. It is suitable for demonstration, but it is not durable across rebuilds unless a persistent disk is added. For durable production uploads, configure object storage instead.
+
+The Blueprint also declares FleetGraph defaults:
+
+| Variable | Value |
+|---|---|
+| `SHIP_FLEETGRAPH_ENABLED` | `true` |
+| `SHIP_FLEETGRAPH_PROVIDER` | `openai` |
+| `SHIP_FLEETGRAPH_MODEL` | `gpt-4o-mini` |
+| `SHIP_FLEETGRAPH_PROACTIVE_ENABLED` | `true` |
+| `SHIP_FLEETGRAPH_SWEEP_INTERVAL_MS` | `60000` |
+| `SHIP_FLEETGRAPH_MAX_EVENTS_PER_SWEEP` | `25` |
+| `SHIP_FLEETGRAPH_TRACING_ENABLED` | `true` |
+| `LANGSMITH_PROJECT` | `ship-week5-fleetgraph` |
+| `LANGSMITH_API_KEY` | Add manually in Render; declared with `sync: false` |
+
+FleetGraph uses the existing `OPENAI_API_KEY` when `SHIP_FLEETGRAPH_PROVIDER=openai`. It also defines a Render cron job named `ship-fleetgraph-drain` that runs `node api/dist/scripts/fleetgraph-drain.js` every two minutes. The job exits after each batch and uses `DATABASE_URL`, `OPENAI_API_KEY`, and `LANGSMITH_API_KEY` from its own cron environment variables.
 
 ### Render Verification
 
@@ -65,8 +82,12 @@ Then verify in a browser:
 - `/events` connects after login.
 - Render logs show migrations applied and no startup errors.
 - `GET /api/assistant/status` returns `available: true` after login when `OPENAI_API_KEY` is set.
+- `GET /api/fleetgraph/status` returns `available: true` after login when `OPENAI_API_KEY`, `DATABASE_URL`, and FleetGraph env vars are set.
+- The `ship-fleetgraph-drain` cron job can be triggered manually and exits successfully after printing a JSON drain result.
 - The Ask Ship rail button opens the assistant panel below Teams.
+- The FleetGraph tab opens inside the same assistant drawer, and unread findings show on the rail badge when delivery rows exist.
 - A known Ask Ship question returns an answer with `traceId`, and `GET /api/assistant/traces/<traceId>` returns the ordered retrieval, rerank, and model events.
+- A known FleetGraph prompt returns a response from `POST /api/fleetgraph/chat`, and any generated run can be inspected with `GET /api/fleetgraph/runs/:id`.
 - Uploading a supported `.txt`, `.md`, `.csv`, `.pdf`, or `.docx` file from a document page reaches `indexed` status and can be cited by Ask Ship.
 
 ### Render Security Probe Trigger

@@ -64,14 +64,13 @@ On-demand flow:
 
 Add environment variables to web service:
 
-- `FLEETGRAPH_ENABLED=true`
-- `FLEETGRAPH_PROVIDER=openai`
-- `FLEETGRAPH_MODEL=<chosen model>`
-- `FLEETGRAPH_PROACTIVE_ENABLED=true`
-- `FLEETGRAPH_SWEEP_INTERVAL_SECONDS=300`
-- `FLEETGRAPH_QUEUE_BATCH_SIZE=10`
-- `FLEETGRAPH_MAX_ATTEMPTS=3`
-- `LANGSMITH_TRACING=true`
+- `SHIP_FLEETGRAPH_ENABLED=true`
+- `SHIP_FLEETGRAPH_PROVIDER=openai`
+- `SHIP_FLEETGRAPH_MODEL=<chosen model>`
+- `SHIP_FLEETGRAPH_PROACTIVE_ENABLED=true`
+- `SHIP_FLEETGRAPH_SWEEP_INTERVAL_MS=60000`
+- `SHIP_FLEETGRAPH_MAX_EVENTS_PER_SWEEP=25`
+- `SHIP_FLEETGRAPH_TRACING_ENABLED=true`
 - `LANGSMITH_API_KEY` with `sync: false`
 - `LANGSMITH_PROJECT=<project name>`
 
@@ -81,8 +80,8 @@ Add a Render cron job:
 
 - name: `ship-fleetgraph-drain`
 - build command: same API-capable build path as existing cron
-- start command: `node api/dist/fleetgraph/drain.js` or equivalent final script
-- schedule: every 1-2 minutes if supported; otherwise the lowest practical cadence plus in-service sweep fallback
+- start command: `node api/dist/scripts/fleetgraph-drain.js`
+- schedule: every 2 minutes for the demo branch, with the in-service sweep fallback retained for missed runs
 
 Do not commit secrets into `render.yaml`.
 
@@ -98,8 +97,7 @@ Local dev should support:
 Proposed scripts after implementation:
 
 - `pnpm --filter @ship/api fleetgraph:drain`
-- `pnpm --filter @ship/api fleetgraph:sweep`
-- `pnpm --filter @ship/api fleetgraph:demo`
+- `node api/dist/scripts/fleetgraph-drain.js` after `pnpm build:api`
 
 Add root scripts only if they are useful for the final submission workflow.
 
@@ -156,4 +154,3 @@ Recommended defaults:
 - Cron plus sweep fallback.
 - Keep run rows and findings through submission.
 - Defer checkpoint cleanup until after the final demo.
-
