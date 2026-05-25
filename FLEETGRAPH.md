@@ -531,7 +531,7 @@ Current deterministic evidence:
 
 - `e2e/fixtures/isolated-env.ts` seeds a completed proactive FleetGraph run, a delivered unread finding, and a pending human action proposal.
 - `e2e/fleetgraph.spec.ts` opens FleetGraph from a Ship document, marks the delivered finding read, rejects the action proposal with a note, and verifies contextual chat response grounding.
-- `api/src/services/fleetgraph/eval-harness.test.ts` scores four graph paths: proactive finding-only, HITL action proposal, no-finding, and context chat.
+- `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus the no-finding branch: week planning gap, project churn/stalled issues, stale engineer issue, approved-plan-change HITL, missing ownership, context chat, and no-finding.
 
 Blocked until local PostgreSQL is running:
 

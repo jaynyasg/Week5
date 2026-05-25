@@ -6,7 +6,7 @@ import type { FleetGraphContext, FleetGraphIssueRef, FleetGraphRecordRef } from 
 describe('FleetGraph eval harness', () => {
   it('scores deterministic graph paths needed for submission evidence', () => {
     const results = {
-      'proactive-finding-only': runFleetGraphState({
+      'week-starts-without-approved-plan': runFleetGraphState({
         context: context({
           week: record('week-1', 'sprint', 'Week 5', {
             sprint_status: 'active',
@@ -14,13 +14,38 @@ describe('FleetGraph eval harness', () => {
           }),
         }),
       }),
-      'hitl-action-proposal': runFleetGraphState({
+      'project-churn-stalled-issues': runFleetGraphState({
+        context: context({
+          project: record('project-1', 'project', 'Launch Project', {
+            owner_id: 'owner-1',
+            accountable_id: 'accountable-1',
+          }),
+          issues: [
+            issue('issue-1', 'Blocked integration'),
+            issue('issue-2', 'Late review'),
+            issue('issue-3', 'Unassigned dependency'),
+          ],
+        }),
+      }),
+      'stale-blocked-engineer-issue': runFleetGraphState({
+        context: context({
+          issues: [
+            issue('issue-1', 'Blocked integration'),
+          ],
+        }),
+      }),
+      'approved-plan-changes-after-approval': runFleetGraphState({
         context: context({
           weekPlan: record('plan-1', 'weekly_plan', 'Week Plan', {
             approval_status: 'approved',
             approved_at: '2026-05-20T00:00:00.000Z',
             changed_after_approval: true,
           }),
+        }),
+      }),
+      'missing-owner-accountable-role': runFleetGraphState({
+        context: context({
+          project: record('project-1', 'project', 'Launch Project', {}),
         }),
       }),
       'no-finding': runFleetGraphState({
@@ -38,8 +63,8 @@ describe('FleetGraph eval harness', () => {
             accountable_id: 'accountable-1',
           }),
           issues: [
-            issue('issue-1', 'Blocked integration'),
-            issue('issue-2', 'Late review'),
+            issue('issue-1', 'Blocked integration', 'todo', '2026-05-24T00:00:00.000Z'),
+            issue('issue-2', 'Late review', 'todo', '2026-05-24T00:00:00.000Z'),
           ],
         }),
         message: 'What should I look at next?',
@@ -48,17 +73,35 @@ describe('FleetGraph eval harness', () => {
 
     const report = evaluateFleetGraphRuns([
       {
-        id: 'proactive-finding-only',
+        id: 'week-starts-without-approved-plan',
         expectedStatus: 'completed',
         minFindings: 1,
         expectedFindingKinds: ['planning_gap'],
       },
       {
-        id: 'hitl-action-proposal',
+        id: 'project-churn-stalled-issues',
+        expectedStatus: 'completed',
+        minFindings: 2,
+        expectedFindingKinds: ['dependency_risk', 'stale_commitment'],
+      },
+      {
+        id: 'stale-blocked-engineer-issue',
+        expectedStatus: 'completed',
+        minFindings: 1,
+        expectedFindingKinds: ['stale_commitment'],
+      },
+      {
+        id: 'approved-plan-changes-after-approval',
         expectedStatus: 'interrupted',
         minFindings: 1,
         expectedFindingKinds: ['scope_drift'],
         expectedProposalActions: ['request_update'],
+      },
+      {
+        id: 'missing-owner-accountable-role',
+        expectedStatus: 'completed',
+        minFindings: 1,
+        expectedFindingKinds: ['planning_gap'],
       },
       {
         id: 'no-finding',
@@ -74,8 +117,8 @@ describe('FleetGraph eval harness', () => {
     ], results);
 
     expect(report).toMatchObject({
-      total: 4,
-      passed: 4,
+      total: 7,
+      passed: 7,
       score: 1,
     });
   });
@@ -110,15 +153,20 @@ function record(
   };
 }
 
-function issue(id: string, title: string): FleetGraphIssueRef {
+function issue(
+  id: string,
+  title: string,
+  state = 'todo',
+  updatedAt = '2026-05-01T00:00:00.000Z',
+): FleetGraphIssueRef {
   return {
     ...record(id, 'issue', title, {
-      state: 'todo',
+      state,
       assignee_id: 'owner-1',
       priority: 'high',
-    }, '2026-05-01T00:00:00.000Z'),
+    }, updatedAt),
     documentType: 'issue',
-    state: 'todo',
+    state,
     assigneeId: 'owner-1',
     priority: 'high',
   };

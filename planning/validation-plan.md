@@ -221,7 +221,7 @@ New deterministic coverage:
 
 - `e2e/fixtures/isolated-env.ts` owns FleetGraph setup data for a completed proactive run, delivered finding, unread delivery, and pending action proposal.
 - `e2e/fleetgraph.spec.ts` now exercises the FleetGraph drawer, delivered finding detail, delivery read-state transition, action proposal rejection, and context-aware chat response.
-- `api/src/services/fleetgraph/eval-harness.test.ts` scores proactive finding-only, HITL action proposal, no-finding, and context chat graph paths with a focused no-database Vitest config.
+- `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus the no-finding branch with a focused no-database Vitest config.
 
 Blocked locally:
 

@@ -206,15 +206,15 @@ Trace link:
 | Use Case | Required For MVP? | Expected Path | Trace Link | Status |
 |---|---:|---|---|---|
 | Week starts without approved plan | Yes | Proactive finding or HITL | TBD | Deterministic eval covers proactive `planning_gap`; LangSmith trace pending |
-| Project churn/stalled issues | Yes | Proactive finding | TBD | Detector planned; trace pending |
-| Stale/blocked engineer issue | Yes | Proactive or on-demand | TBD | Detector planned; trace pending |
+| Project churn/stalled issues | Yes | Proactive finding | TBD | Deterministic eval covers `dependency_risk` with stale issue evidence; LangSmith trace pending |
+| Stale/blocked engineer issue | Yes | Proactive or on-demand | TBD | Deterministic eval covers `stale_commitment`; LangSmith trace pending |
 | Approved plan changes | Yes | HITL proposal | TBD | Deterministic E2E seed and eval cover HITL `scope_drift`; LangSmith trace pending |
-| Missing owner/accountable | Yes | Finding or HITL proposal | TBD | Detector planned; trace pending |
+| Missing owner/accountable | Yes | Finding or HITL proposal | TBD | Deterministic eval covers missing ownership `planning_gap`; LangSmith trace pending |
 | Context-aware project chat | Yes | On-demand chat | TBD | Deterministic E2E and eval cover grounded chat; LangSmith trace pending |
 
 Deterministic local evidence added on 2026-05-25:
 
-- `api/src/services/fleetgraph/eval-harness.test.ts` scores proactive finding-only, HITL proposal, no-finding, and context chat paths.
+- `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus no-finding: proactive planning gap, project churn, stale issue, HITL approved-plan change, missing ownership, and context chat.
 - `e2e/fleetgraph.spec.ts` verifies the delivered finding UI, read-state transition, action proposal rejection, and context-aware chat response against seeded Ship data.
 - Final submission still needs real LangSmith trace links from deployed or locally configured model-backed runs.
 
