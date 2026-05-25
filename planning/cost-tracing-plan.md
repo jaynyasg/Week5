@@ -1,0 +1,180 @@
+# FleetGraph Cost and Tracing Plan
+
+Last updated: 2026-05-25
+
+Generated via `$gsd-docs-update` from the PRD, `PRESEARCH.md`, and `FLEETGRAPH.md`.
+
+## Purpose
+
+This plan defines how FleetGraph will track graph costs, produce LangSmith traces, and fill the final cost analysis required by the PRD.
+
+## PRD Requirements
+
+FleetGraph must document:
+
+- LangSmith tracing from day one.
+- At least two shared trace links.
+- Trace links that show different graph paths.
+- Actual development/testing spend.
+- Claude/API cost input and output token breakdown if applicable.
+- Number of graph invocations during development.
+- Total development spend.
+- Production monthly cost projections at 100, 1,000, and 10,000 users.
+- Assumptions for proactive runs, on-demand invocations, and average tokens.
+
+## Trace Storage Plan
+
+Store trace metadata in `fleetgraph_runs`:
+
+- `langsmith_trace_url`
+- `thread_id`
+- `mode`
+- `trigger_type`
+- `model`
+- `input_tokens`
+- `output_tokens`
+- `estimated_cost_usd`
+- safe metadata
+
+Store trace URL summary in finding document properties:
+
+- `properties.langsmith_trace_url`
+- `properties.run_id`
+- `properties.thread_id`
+
+Do not store:
+
+- API keys
+- bearer tokens
+- cookies
+- raw private document dumps
+- full prompt text if it includes sensitive state
+
+## Required Trace Paths
+
+Trace A: proactive finding-only path.
+
+Expected route:
+
+```text
+event/sweep -> normalize context -> fetch Ship state -> detect condition -> persist finding -> create delivery -> notify -> complete
+```
+
+Trace B: HITL path.
+
+Expected route:
+
+```text
+event/chat -> normalize context -> fetch Ship state -> detect condition -> create proposal -> interrupt -> approve/reject -> resume -> complete
+```
+
+Optional Trace C: no-finding path.
+
+Expected route:
+
+```text
+event/sweep -> normalize context -> fetch Ship state -> no surfacing-worthy condition -> complete without finding
+```
+
+## Token and Cost Capture
+
+Capture per graph run:
+
+- provider
+- model
+- prompt/input tokens
+- completion/output tokens
+- total tokens
+- provider-reported cost if available
+- estimated cost if provider does not return cost
+- graph mode: proactive or on-demand
+- detection type
+- source route/context
+
+If using OpenAI-compatible metadata, normalize model token usage into the same fields regardless of graph path.
+
+## Cost Formula
+
+Per run:
+
+```text
+estimated_cost = (input_tokens / 1_000_000 * input_price_per_million)
+               + (output_tokens / 1_000_000 * output_price_per_million)
+```
+
+Monthly projection:
+
+```text
+monthly_cost = users
+             * projects_per_user
+             * proactive_runs_per_project_per_day
+             * 30
+             * avg_proactive_run_cost
+           + users
+             * on_demand_invocations_per_user_per_day
+             * 30
+             * avg_on_demand_run_cost
+```
+
+Use current provider prices on the submission date. Do not hard-code stale prices in final docs without rechecking.
+
+## Initial Assumptions To Replace With Measurements
+
+These are placeholders until real runs exist:
+
+| Variable | Starter assumption | Replace with |
+|---|---:|---|
+| Projects per user | 1 | observed Ship demo data |
+| Proactive runs per project/day | 12 | queue/sweep plan after implementation |
+| On-demand invocations per user/day | 3 | demo usage estimate |
+| Avg proactive input tokens | TBD | `fleetgraph_runs.input_tokens` |
+| Avg proactive output tokens | TBD | `fleetgraph_runs.output_tokens` |
+| Avg on-demand input tokens | TBD | `fleetgraph_runs.input_tokens` |
+| Avg on-demand output tokens | TBD | `fleetgraph_runs.output_tokens` |
+
+## Development Spend Log
+
+Add a table to final `FLEETGRAPH.md`:
+
+| Date | Run type | Count | Input tokens | Output tokens | Cost | Notes |
+|---|---:|---:|---:|---:|---:|---|
+| TBD | proactive | TBD | TBD | TBD | TBD | TBD |
+| TBD | on-demand | TBD | TBD | TBD | TBD | TBD |
+
+## Production Projection Table
+
+Final `FLEETGRAPH.md` should include:
+
+| Scale | Monthly estimate | Assumptions |
+|---|---:|---|
+| 100 users | TBD | TBD |
+| 1,000 users | TBD | TBD |
+| 10,000 users | TBD | TBD |
+
+## Trace Submission Checklist
+
+Before pasting shared trace links into final docs:
+
+- Open each shared link in a clean browser session.
+- Confirm it does not reveal secrets.
+- Confirm it shows expected graph nodes/branches.
+- Confirm the two required links show different execution paths.
+- Record the Ship state that triggered each trace.
+- Record the expected output next to the trace link.
+
+## Implementation Hooks
+
+Code areas likely involved:
+
+- `api/src/services/fleetgraph/runner`
+- `api/src/services/fleetgraph/tracing`
+- `api/src/services/fleetgraph/costs`
+- `api/src/services/fleetgraph/findings`
+- `api/src/routes/fleetgraph.ts`
+
+Existing reference:
+
+- `api/src/services/assistant/tracing.ts`
+- `api/src/db/migrations/046_assistant_hybrid_rag_traces.sql`
+- `docs/assistant.md`
+
