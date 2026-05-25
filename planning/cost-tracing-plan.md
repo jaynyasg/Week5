@@ -128,6 +128,12 @@ Checked on 2026-05-25 against [OpenAI GPT-4o mini model pricing](https://develop
 
 Seeded local evidence uses 1,200 input tokens and 280 output tokens, which evaluates to $0.000348 with this pricing.
 
+Implementation status:
+
+- FleetGraph run completion now records estimated input/output tokens for local graph runs when provider metadata is unavailable.
+- The timed FleetGraph E2E verifies the linked `fleetgraph_runs` row has nonzero token metadata and a non-null estimated cost field.
+- Mock local runs still use the mock model rate unless price overrides are configured, so final submission must replace local evidence with deployed or model-backed run rows.
+
 ## Initial Assumptions To Replace With Measurements
 
 These are placeholders until real runs exist:

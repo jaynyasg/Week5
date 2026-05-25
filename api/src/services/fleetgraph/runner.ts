@@ -10,7 +10,14 @@ import {
 import type {
   FleetGraphContext,
   FleetGraphRunResult,
+  FleetGraphState,
 } from './types.js';
+
+interface EstimatedFleetGraphUsage {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+}
 
 export async function runFleetGraph(input: {
   workspaceId: string;
@@ -56,6 +63,7 @@ export async function runFleetGraph(input: {
   await completeFleetGraphRun({
     run,
     status: result.status === 'failed' ? 'failed' : result.status === 'interrupted' ? 'interrupted' : 'completed',
+    usage: estimateFleetGraphUsage(result.state),
     metadata: {
       findingCount: result.state.findings.length,
       proposalCount: result.state.proposals.length,
@@ -104,4 +112,33 @@ export async function safeRunFleetGraph(input: Parameters<typeof runFleetGraph>[
       },
     };
   }
+}
+
+export function estimateFleetGraphUsage(state: FleetGraphState): EstimatedFleetGraphUsage {
+  const recordCount = [
+    state.context.currentDocument,
+    state.context.program,
+    state.context.project,
+    state.context.week,
+    state.context.weekPlan,
+  ].filter(Boolean).length + state.context.issues.length;
+  const evidenceCount = state.findings.reduce((sum, finding) => sum + finding.evidence.length, 0);
+  const answerLength = state.answer?.content.length ?? 0;
+
+  const inputTokens = 600
+    + recordCount * 180
+    + state.findings.length * 90
+    + state.proposals.length * 80
+    + Math.ceil((state.message?.length ?? 0) / 4);
+  const outputTokens = 120
+    + state.findings.length * 100
+    + state.proposals.length * 80
+    + evidenceCount * 25
+    + Math.ceil(answerLength / 4);
+
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+  };
 }

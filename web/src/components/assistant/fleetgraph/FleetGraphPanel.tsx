@@ -69,7 +69,12 @@ export function FleetGraphPanel({ context, onUnreadCountChange }: FleetGraphPane
 
         <div className={cn('flex min-h-0 flex-col', fleetGraph.messages.length === 0 && 'justify-end')}>
           <AssistantMessages
-            messages={fleetGraph.messages.map(({ response: _response, ...message }) => message)}
+            messages={fleetGraph.messages.map((message) => ({
+              id: message.id,
+              role: message.role,
+              content: message.content,
+              createdAt: message.createdAt,
+            }))}
             sending={fleetGraph.sending}
           />
         </div>

@@ -90,6 +90,7 @@ test.describe('FleetGraph assistant drawer', () => {
     });
     expect(sprintResponse.ok()).toBe(true);
     const sprint = await sprintResponse.json();
+    let deliveredFinding: { id: string } | undefined;
 
     await expect.poll(async () => {
       runFleetGraphDrain(dbContainer.getConnectionUri());
@@ -103,12 +104,26 @@ test.describe('FleetGraph assistant drawer', () => {
           && item.kind === 'planning_gap'
           && item.title.includes('Week plan needs approval'),
       );
+      deliveredFinding = finding;
 
       return finding ? 'delivered' : 'waiting';
     }, {
       intervals: [1000, 2000, 5000],
       timeout: 60_000,
     }).toBe('delivered');
+
+    expect(deliveredFinding, 'Timed FleetGraph run should deliver a finding').toBeTruthy();
+    const detailResponse = await page.request.get(`${apiServer.url}/api/fleetgraph/findings/${deliveredFinding!.id}`);
+    expect(detailResponse.ok()).toBe(true);
+    const findingDetail = await detailResponse.json();
+    expect(findingDetail.runId).toBeTruthy();
+
+    const runResponse = await page.request.get(`${apiServer.url}/api/fleetgraph/runs/${findingDetail.runId}`);
+    expect(runResponse.ok()).toBe(true);
+    const run = await runResponse.json();
+    expect(run.inputTokens).toBeGreaterThan(0);
+    expect(run.outputTokens).toBeGreaterThan(0);
+    expect(run.estimatedCostUsd).not.toBeNull();
 
     const latencyMs = Date.now() - startedAt;
     expect(latencyMs).toBeLessThan(FIVE_MINUTES_MS);

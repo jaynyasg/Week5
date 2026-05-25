@@ -4,6 +4,10 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/services/fleetgraph/eval-harness.test.ts'],
+    include: [
+      'src/services/fleetgraph/costs.test.ts',
+      'src/services/fleetgraph/eval-harness.test.ts',
+      'src/services/fleetgraph/runner-usage.test.ts',
+    ],
   },
 });
