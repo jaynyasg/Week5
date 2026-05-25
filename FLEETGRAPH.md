@@ -480,6 +480,21 @@ Cost assumptions to fill before final submission:
 - Current provider price for chosen model on submission day.
 - Monthly projections at 100, 1,000, and 10,000 users.
 
+Starter cost baseline checked on 2026-05-25:
+
+- Model: `gpt-4o-mini` for low-cost FleetGraph demo runs.
+- Price source: [OpenAI GPT-4o mini model pricing](https://developers.openai.com/api/docs/models/gpt-4o-mini).
+- Standard text price used for estimates: $0.15 / 1M input tokens and $0.60 / 1M output tokens.
+- E2E seed run example: 1,200 input tokens + 280 output tokens = $0.000348.
+
+Starter projection to replace with real `fleetgraph_runs` measurements:
+
+| Scale | Monthly estimate | Assumptions |
+|---|---:|---|
+| 100 users | $52.92 | 1 project/user, 12 proactive runs/project/day, 3 on-demand runs/user/day, 5k/500 proactive tokens, 8k/800 on-demand tokens |
+| 1,000 users | $529.20 | Same starter assumptions |
+| 10,000 users | $5,292.00 | Same starter assumptions |
+
 ## Test Plan
 
 Required implementation tests:
@@ -506,9 +521,17 @@ Passing local checks:
 - `pnpm type-check`
 - `pnpm build:api`
 - `pnpm build:web`
+- `pnpm --filter @ship/api test:fleetgraph-eval`
+- `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1`
 - focused FleetGraph web hook and drawer tests
 - `git diff --check`
 - pre-commit empty-test check
+
+Current deterministic evidence:
+
+- `e2e/fixtures/isolated-env.ts` seeds a completed proactive FleetGraph run, a delivered unread finding, and a pending human action proposal.
+- `e2e/fleetgraph.spec.ts` opens FleetGraph from a Ship document, marks the delivered finding read, rejects the action proposal with a note, and verifies contextual chat response grounding.
+- `api/src/services/fleetgraph/eval-harness.test.ts` scores four graph paths: proactive finding-only, HITL action proposal, no-finding, and context chat.
 
 Blocked until local PostgreSQL is running:
 
@@ -517,7 +540,6 @@ Blocked until local PostgreSQL is running:
 
 Pending final submission evidence:
 
-- deterministic E2E seed data for proactive, on-demand, and HITL paths
 - timed event-to-finding run under 5 minutes
 - at least two reviewed LangSmith trace links
 - cost table from real `fleetgraph_runs` data

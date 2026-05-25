@@ -118,6 +118,16 @@ monthly_cost = users
 
 Use current provider prices on the submission date. Do not hard-code stale prices in final docs without rechecking.
 
+## Current Starter Pricing Snapshot
+
+Checked on 2026-05-25 against [OpenAI GPT-4o mini model pricing](https://developers.openai.com/api/docs/models/gpt-4o-mini).
+
+| Model | Input | Output | Notes |
+|---|---:|---:|---|
+| `gpt-4o-mini` | $0.15 / 1M tokens | $0.60 / 1M tokens | Starter low-cost model for demo estimates; recheck on submission day |
+
+Seeded local evidence uses 1,200 input tokens and 280 output tokens, which evaluates to $0.000348 with this pricing.
+
 ## Initial Assumptions To Replace With Measurements
 
 These are placeholders until real runs exist:
@@ -127,10 +137,17 @@ These are placeholders until real runs exist:
 | Projects per user | 1 | observed Ship demo data |
 | Proactive runs per project/day | 12 | queue/sweep plan after implementation |
 | On-demand invocations per user/day | 3 | demo usage estimate |
-| Avg proactive input tokens | TBD | `fleetgraph_runs.input_tokens` |
-| Avg proactive output tokens | TBD | `fleetgraph_runs.output_tokens` |
-| Avg on-demand input tokens | TBD | `fleetgraph_runs.input_tokens` |
-| Avg on-demand output tokens | TBD | `fleetgraph_runs.output_tokens` |
+| Avg proactive input tokens | 5,000 | `fleetgraph_runs.input_tokens` |
+| Avg proactive output tokens | 500 | `fleetgraph_runs.output_tokens` |
+| Avg on-demand input tokens | 8,000 | `fleetgraph_runs.input_tokens` |
+| Avg on-demand output tokens | 800 | `fleetgraph_runs.output_tokens` |
+
+Derived starter costs:
+
+| Run type | Starter tokens | Estimated cost/run |
+|---|---:|---:|
+| Proactive | 5,000 input / 500 output | $0.00105 |
+| On-demand | 8,000 input / 800 output | $0.00168 |
 
 ## Development Spend Log
 
@@ -147,9 +164,9 @@ Final `FLEETGRAPH.md` should include:
 
 | Scale | Monthly estimate | Assumptions |
 |---|---:|---|
-| 100 users | TBD | TBD |
-| 1,000 users | TBD | TBD |
-| 10,000 users | TBD | TBD |
+| 100 users | $52.92 | 1 project/user, 12 proactive runs/project/day, 3 on-demand runs/user/day |
+| 1,000 users | $529.20 | Same starter assumptions |
+| 10,000 users | $5,292.00 | Same starter assumptions |
 
 ## Trace Submission Checklist
 
@@ -177,4 +194,3 @@ Existing reference:
 - `api/src/services/assistant/tracing.ts`
 - `api/src/db/migrations/046_assistant_hybrid_rag_traces.sql`
 - `docs/assistant.md`
-

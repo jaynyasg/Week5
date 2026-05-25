@@ -205,12 +205,18 @@ Trace link:
 
 | Use Case | Required For MVP? | Expected Path | Trace Link | Status |
 |---|---:|---|---|---|
-| Week starts without approved plan | Yes | Proactive finding or HITL | TBD | Planned |
-| Project churn/stalled issues | Yes | Proactive finding | TBD | Planned |
-| Stale/blocked engineer issue | Yes | Proactive or on-demand | TBD | Planned |
-| Approved plan changes | Yes | HITL proposal | TBD | Planned |
-| Missing owner/accountable | Yes | Finding or HITL proposal | TBD | Planned |
-| Context-aware project chat | Yes | On-demand chat | TBD | Planned |
+| Week starts without approved plan | Yes | Proactive finding or HITL | TBD | Deterministic eval covers proactive `planning_gap`; LangSmith trace pending |
+| Project churn/stalled issues | Yes | Proactive finding | TBD | Detector planned; trace pending |
+| Stale/blocked engineer issue | Yes | Proactive or on-demand | TBD | Detector planned; trace pending |
+| Approved plan changes | Yes | HITL proposal | TBD | Deterministic E2E seed and eval cover HITL `scope_drift`; LangSmith trace pending |
+| Missing owner/accountable | Yes | Finding or HITL proposal | TBD | Detector planned; trace pending |
+| Context-aware project chat | Yes | On-demand chat | TBD | Deterministic E2E and eval cover grounded chat; LangSmith trace pending |
+
+Deterministic local evidence added on 2026-05-25:
+
+- `api/src/services/fleetgraph/eval-harness.test.ts` scores proactive finding-only, HITL proposal, no-finding, and context chat paths.
+- `e2e/fleetgraph.spec.ts` verifies the delivered finding UI, read-state transition, action proposal rejection, and context-aware chat response against seeded Ship data.
+- Final submission still needs real LangSmith trace links from deployed or locally configured model-backed runs.
 
 Minimum final trace set:
 
@@ -223,4 +229,3 @@ Preferred final trace set:
 - HITL proposal trace.
 - On-demand chat trace.
 - No-finding trace.
-

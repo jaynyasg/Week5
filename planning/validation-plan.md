@@ -194,12 +194,12 @@ pnpm build
 
 | Evidence | Source | Status |
 |---|---|---|
-| Proactive detection | E2E/timed run | Planned |
-| On-demand chat | UI/E2E run | Planned |
-| HITL gate | API + UI test | Planned |
+| Proactive detection | E2E/timed run | Deterministic E2E seed passed; timed real event run pending |
+| On-demand chat | UI/E2E run | Deterministic E2E passed |
+| HITL gate | API + UI test | Deterministic E2E reject flow passed; DB-backed API authorization coverage pending |
 | Trace link 1 | LangSmith | TBD |
 | Trace link 2 | LangSmith | TBD |
-| Cost per run | `fleetgraph_runs` + provider metadata | Planned |
+| Cost per run | `fleetgraph_runs` + provider metadata | Starter projection documented; real run table pending |
 | Public deployment | Render URL | TBD |
 
 ## Implementation Validation Snapshot
@@ -212,13 +212,17 @@ Completed locally:
 - `pnpm build:api`
 - `pnpm build:web`
 - `pnpm --filter @ship/web exec vitest run src/hooks/useFleetGraph.test.tsx src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx`
+- `pnpm --filter @ship/api test:fleetgraph-eval`
+- `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1`
 - `git diff --check`
 - pre-commit empty-test check
 
+New deterministic coverage:
+
+- `e2e/fixtures/isolated-env.ts` owns FleetGraph setup data for a completed proactive run, delivered finding, unread delivery, and pending action proposal.
+- `e2e/fleetgraph.spec.ts` now exercises the FleetGraph drawer, delivered finding detail, delivery read-state transition, action proposal rejection, and context-aware chat response.
+- `api/src/services/fleetgraph/eval-harness.test.ts` scores proactive finding-only, HITL action proposal, no-finding, and context chat graph paths with a focused no-database Vitest config.
+
 Blocked locally:
 
-- Focused API FleetGraph tests and DB-backed migration/service tests require local PostgreSQL. The last attempt failed during test setup with `ECONNREFUSED` on `localhost:5432`, before FleetGraph assertions ran.
-
-Intentional placeholder:
-
-- `e2e/fleetgraph.spec.ts` currently uses `test.fixme()` until deterministic FleetGraph seed data is added to `e2e/fixtures/isolated-env.ts`.
+- Focused DB-backed API FleetGraph tests and migration/service tests require local PostgreSQL. The last standard API Vitest attempt failed during shared test setup with `ECONNREFUSED` on `localhost:5432`, before FleetGraph assertions ran.

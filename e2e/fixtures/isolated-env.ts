@@ -193,6 +193,11 @@ export const test = base.extend<
           NODE_ENV: 'test',
           SHIP_ASSISTANT_ENABLED: process.env.SHIP_ASSISTANT_ENABLED ?? 'true',
           SHIP_ASSISTANT_PROVIDER: process.env.SHIP_ASSISTANT_PROVIDER ?? 'mock',
+          SHIP_FLEETGRAPH_ENABLED: process.env.SHIP_FLEETGRAPH_ENABLED ?? 'true',
+          SHIP_FLEETGRAPH_PROVIDER: process.env.SHIP_FLEETGRAPH_PROVIDER ?? 'mock',
+          SHIP_FLEETGRAPH_MODEL: process.env.SHIP_FLEETGRAPH_MODEL ?? 'mock-fleetgraph',
+          SHIP_FLEETGRAPH_PROACTIVE_ENABLED: process.env.SHIP_FLEETGRAPH_PROACTIVE_ENABLED ?? 'true',
+          SHIP_FLEETGRAPH_TRACING_ENABLED: process.env.SHIP_FLEETGRAPH_TRACING_ENABLED ?? 'false',
           // Prevent dotenv from overriding our DATABASE_URL
           DOTENV_CONFIG_PATH: '/dev/null',
         },
@@ -812,6 +817,120 @@ async function seedMinimalTestData(pool: Pool): Promise<void> {
       [workspaceId, doc.title, JSON.stringify(contentJson), i + 1, userId]
     );
   }
+
+  await seedFleetGraphTestData(pool, {
+    workspaceId,
+    userId,
+    projectId: projectIds['SHIP'],
+    programId: programIds['SHIP'],
+    weekId: sprintIds['SHIP'][currentSprintNumber],
+  });
+}
+
+async function seedFleetGraphTestData(
+  pool: Pool,
+  input: {
+    workspaceId: string;
+    userId: string;
+    projectId?: string;
+    programId?: string;
+    weekId?: string;
+  },
+): Promise<void> {
+  if (!input.projectId || !input.programId || !input.weekId) return;
+
+  const detectedAt = new Date().toISOString();
+  const runResult = await pool.query(
+    `INSERT INTO fleetgraph_runs (
+       workspace_id, user_id, mode, trigger_type, trigger_id, thread_id,
+       status, provider, model, input_tokens, output_tokens,
+       estimated_cost_usd, langsmith_trace_url, metadata, completed_at
+     )
+     VALUES (
+       $1, $2, 'proactive', 'fleetgraph.e2e_seed', $3,
+       'fleetgraph:e2e:proactive:approved-plan-changed',
+       'completed', 'mock', 'mock-fleetgraph', 1200, 280,
+       0.000348, NULL,
+       $4, now()
+     )
+     RETURNING id`,
+    [
+      input.workspaceId,
+      input.userId,
+      input.projectId,
+      JSON.stringify({
+        seed: 'fleetgraph-e2e',
+        expectedPath: 'proactive-finding-with-action-proposal',
+      }),
+    ],
+  );
+  const runId = runResult.rows[0].id;
+
+  const findingProperties = {
+    status: 'open',
+    severity: 'high',
+    kind: 'scope_drift',
+    confidence: 0.91,
+    summary: 'Approved plan changed after approval and needs human review.',
+    rationale: 'FleetGraph detected a material update after the approval timestamp and preserved the change as a finding instead of mutating approval state.',
+    target_document_id: input.projectId,
+    target_document_type: 'project',
+    owner_user_id: input.userId,
+    run_id: runId,
+    evidence: [
+      {
+        sourceType: 'project',
+        sourceId: input.projectId,
+        title: 'Ship Core Redesign',
+        excerpt: 'The approved delivery plan changed after approval; re-review is required before downstream work proceeds.',
+        url: `/documents/${input.projectId}`,
+      },
+    ],
+    first_detected_at: detectedAt,
+    last_observed_at: detectedAt,
+    fleetgraph_key: 'e2e-approved-plan-changed',
+  };
+
+  const findingResult = await pool.query(
+    `INSERT INTO documents (workspace_id, document_type, title, properties, created_by, visibility)
+     VALUES ($1, 'fleetgraph_finding', 'Approved plan changed after approval', $2, $3, 'workspace')
+     RETURNING id`,
+    [input.workspaceId, JSON.stringify(findingProperties), input.userId],
+  );
+  const findingDocumentId = findingResult.rows[0].id;
+
+  await pool.query(
+    `INSERT INTO document_associations (document_id, related_id, relationship_type)
+     VALUES
+       ($1, $2, 'program'),
+       ($1, $3, 'project'),
+       ($1, $4, 'sprint')`,
+    [findingDocumentId, input.programId, input.projectId, input.weekId],
+  );
+
+  await pool.query(
+    `INSERT INTO fleetgraph_deliveries (workspace_id, finding_document_id, user_id, status)
+     VALUES ($1, $2, $3, 'unread')`,
+    [input.workspaceId, findingDocumentId, input.userId],
+  );
+
+  await pool.query(
+    `INSERT INTO fleetgraph_action_proposals (
+       workspace_id, finding_document_id, run_id, proposed_action,
+       target_document_id, payload, status, requested_by_actor
+     )
+     VALUES ($1, $2, $3, 'request_update', $4, $5, 'pending', 'fleetgraph')`,
+    [
+      input.workspaceId,
+      findingDocumentId,
+      runId,
+      input.projectId,
+      JSON.stringify({
+        reason: 'approved_plan_changed',
+        recommendation: 'Ask the project owner to re-review the approved plan.',
+      }),
+    ],
+  );
 }
 
 /**
