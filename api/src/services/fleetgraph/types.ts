@@ -157,3 +157,24 @@ export interface FleetGraphRunResult {
   state: FleetGraphState;
   error?: string;
 }
+
+export interface FleetGraphQueueEvent {
+  id: string;
+  workspaceId: string;
+  sourceEventType: string;
+  sourceDocumentId: string | null;
+  payload: Record<string, unknown>;
+  status: 'queued' | 'processing' | 'completed' | 'retrying' | 'failed';
+  idempotencyKey: string;
+  attemptCount: number;
+  createdAt: string;
+}
+
+export interface FleetGraphDeliveryPayload {
+  findingId: string;
+  deliveryId: string;
+  severity: string;
+  title: string;
+  targetLabel: string | null;
+  actionRequired: boolean;
+}

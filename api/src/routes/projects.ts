@@ -12,6 +12,7 @@ import {
   getProjectTimeline,
   getProjectTimelineVariance,
 } from '../services/timeline.js';
+import { enqueueFleetGraphDocumentMutation } from '../services/fleetgraph/route-hooks.js';
 
 type RouterType = ReturnType<typeof Router>;
 const router: RouterType = Router();
@@ -699,8 +700,18 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
       }
     }
 
+    const createdProject = extractProjectFromRow({ ...result.rows[0], program_id: program_id || null, inferred_status: 'backlog' });
+    enqueueFleetGraphDocumentMutation({
+      workspaceId: req.workspaceId,
+      userId: req.userId,
+      documentId: createdProject.id,
+      sourceEventType: 'project.created',
+      stateKey: result.rows[0].updated_at ?? createdProject.id,
+      payload: { documentType: 'project' },
+    });
+
     res.status(201).json({
-      ...extractProjectFromRow({ ...result.rows[0], program_id: program_id || null, inferred_status: 'backlog' }),
+      ...createdProject,
       sprint_count: 0,
       issue_count: 0,
       owner,
@@ -868,6 +879,14 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
     if (data.plan && data.plan.trim() !== '') {
       broadcastToUser(userId, 'accountability:updated', { type: 'project_plan', targetId: id as string });
     }
+    enqueueFleetGraphDocumentMutation({
+      workspaceId: req.workspaceId,
+      userId,
+      documentId: id as string,
+      sourceEventType: 'project.updated',
+      stateKey: Date.now(),
+      payload: { changedFields: Object.keys(data) },
+    });
 
     // Log plan changes to document_history for approval workflow tracking
     if (data.plan !== undefined && data.plan !== currentProps.plan) {

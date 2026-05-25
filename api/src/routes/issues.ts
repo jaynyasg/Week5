@@ -11,6 +11,7 @@ import {
   type BelongsToEntry,
 } from '../utils/document-crud.js';
 import { broadcastToUser } from '../collaboration/index.js';
+import { enqueueFleetGraphDocumentMutation } from '../services/fleetgraph/route-hooks.js';
 
 type RouterType = ReturnType<typeof Router>;
 const router: RouterType = Router();
@@ -780,6 +781,14 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
 
     const row = result.rows[0];
     const issue = extractIssueFromRow(row);
+    enqueueFleetGraphDocumentMutation({
+      workspaceId: req.workspaceId,
+      userId: req.userId,
+      documentId: newIssueId,
+      sourceEventType: 'issue.created',
+      stateKey: row.updated_at ?? newIssueId,
+      payload: { documentType: 'issue' },
+    });
     res.status(201).json({
       ...issue,
       display_id: `#${ticketNumber}`,
@@ -1119,6 +1128,14 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
         broadcastToUser(assigneeId, 'accountability:updated', { issueId: id, state: data.state });
       }
     }
+    enqueueFleetGraphDocumentMutation({
+      workspaceId: req.workspaceId,
+      userId: req.userId,
+      documentId: id,
+      sourceEventType: 'issue.updated',
+      stateKey: row.updated_at ?? Date.now(),
+      payload: { state: row.properties?.state },
+    });
 
     res.json({ ...issue, display_id: displayId, belongs_to: belongsTo });
   } catch (err) {

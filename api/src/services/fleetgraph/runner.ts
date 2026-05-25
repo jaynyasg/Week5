@@ -14,7 +14,7 @@ import type {
 
 export async function runFleetGraph(input: {
   workspaceId: string;
-  userId: string;
+  userId?: string | null;
   mode: FleetGraphMode;
   triggerType: string;
   triggerId?: string | null;
@@ -25,7 +25,7 @@ export async function runFleetGraph(input: {
 }): Promise<FleetGraphRunResult> {
   const context = input.context ?? await loadFleetGraphContext({
     workspaceId: input.workspaceId,
-    userId: input.userId,
+    userId: input.userId ?? 'system',
     routeContext: input.routeContext,
   });
   const threadId = makeFleetGraphThreadId({
@@ -36,7 +36,7 @@ export async function runFleetGraph(input: {
 
   const run = await startFleetGraphRun({
     workspaceId: input.workspaceId,
-    userId: input.userId,
+    userId: input.userId ?? null,
     mode: input.mode,
     triggerType: input.triggerType,
     triggerId: input.triggerId ?? input.routeContext?.documentId ?? null,
@@ -89,7 +89,7 @@ export async function safeRunFleetGraph(input: Parameters<typeof runFleetGraph>[
       state: {
         context: input.context ?? {
           workspaceId: input.workspaceId,
-          userId: input.userId,
+          userId: input.userId ?? 'system',
           workspaceAdminUserIds: [],
           issues: [],
           now: new Date().toISOString(),

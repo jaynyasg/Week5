@@ -6,6 +6,7 @@ import { isWorkspaceAdmin } from '../middleware/visibility.js';
 import { handleVisibilityChange, invalidateDocumentCache, broadcastToUser } from '../collaboration/index.js';
 import { extractHypothesisFromContent, extractSuccessCriteriaFromContent, extractVisionFromContent, extractGoalsFromContent, checkDocumentCompleteness } from '../utils/extractHypothesis.js';
 import { loadContentFromYjsState } from '../utils/yjsConverter.js';
+import { enqueueFleetGraphDocumentMutation } from '../services/fleetgraph/route-hooks.js';
 
 type RouterType = ReturnType<typeof Router>;
 const router: RouterType = Router();
@@ -750,6 +751,14 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
     if (document_type === 'weekly_plan' || (properties && 'outcome' in properties)) {
       broadcastToUser(req.userId!, 'accountability:updated', { documentId: newDoc.id, documentType: document_type });
     }
+    enqueueFleetGraphDocumentMutation({
+      workspaceId: req.workspaceId,
+      userId: req.userId,
+      documentId: newDoc.id,
+      sourceEventType: 'document.created',
+      stateKey: newDoc.updated_at ?? newDoc.created_at ?? newDoc.id,
+      payload: { documentType: document_type },
+    });
 
     res.status(201).json(newDoc);
   } catch (err) {
@@ -1218,6 +1227,14 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
 
     // Flatten properties for backwards compatibility (match GET endpoint format)
     const updatedDoc = result.rows[0];
+    enqueueFleetGraphDocumentMutation({
+      workspaceId: req.workspaceId,
+      userId,
+      documentId: id,
+      sourceEventType: 'document.updated',
+      stateKey: updatedDoc.updated_at ?? Date.now(),
+      payload: { documentType: updatedDoc.document_type },
+    });
     const props = updatedDoc.properties || {};
 
     // Get owner details for projects (owner_id is a user_id, lookup person document by user_id)

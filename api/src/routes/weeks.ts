@@ -11,6 +11,7 @@ import {
 import { logDocumentChange, getLatestDocumentFieldHistory } from '../utils/document-crud.js';
 import { broadcastToUser } from '../collaboration/index.js';
 import { extractText } from '../utils/document-content.js';
+import { enqueueFleetGraphDocumentMutation } from '../services/fleetgraph/route-hooks.js';
 
 type RouterType = ReturnType<typeof Router>;
 const router: RouterType = Router();
@@ -1063,6 +1064,14 @@ router.post('/', authMiddleware, async (req: Request, res: Response) => {
         [sprintId, program_id]
       );
     }
+    enqueueFleetGraphDocumentMutation({
+      workspaceId,
+      userId,
+      documentId: sprintId,
+      sourceEventType: 'week.created',
+      stateKey: sprintId,
+      payload: { documentType: 'sprint' },
+    });
 
     res.status(201).json({
       id: result.rows[0].id,
@@ -1264,6 +1273,15 @@ router.patch('/:id', authMiddleware, async (req: Request, res: Response) => {
        WHERE d.id = $1 AND d.document_type = 'sprint'`,
       [id]
     );
+
+    enqueueFleetGraphDocumentMutation({
+      workspaceId: req.workspaceId,
+      userId: req.userId,
+      documentId: id as string,
+      sourceEventType: 'week.updated',
+      stateKey: Date.now(),
+      payload: { documentType: 'sprint' },
+    });
 
     res.json(extractSprintFromRow(result.rows[0]));
   } catch (err) {
