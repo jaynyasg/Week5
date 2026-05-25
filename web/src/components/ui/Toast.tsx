@@ -45,7 +45,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <div className="fixed bottom-20 right-4 z-50 flex flex-col gap-2">
+      <div className="pointer-events-none fixed bottom-24 left-3 right-3 z-50 flex flex-col gap-2 sm:bottom-20 sm:left-auto sm:right-4">
         {toasts.map((toast) => (
           <ToastItem key={toast.id} toast={toast} onClose={() => removeToast(toast.id)} />
         ))}
@@ -71,7 +71,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
       aria-live="polite"
       className={cn(
         'px-4 py-2 rounded-lg shadow-lg text-sm animate-in slide-in-from-right-4 fade-in',
-        'flex items-center gap-2 min-w-[200px]',
+        'pointer-events-auto flex min-w-0 items-center gap-2 sm:min-w-[200px]',
         toast.type === 'success' && 'bg-green-500/90 text-white',
         toast.type === 'error' && 'bg-red-500/90 text-white',
         toast.type === 'info' && 'bg-accent/90 text-white'
@@ -79,7 +79,7 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
     >
       {toast.type === 'success' && <CheckIcon className="h-4 w-4" />}
       {toast.type === 'error' && <XIcon className="h-4 w-4" />}
-      <span>{toast.message}</span>
+      <span className="min-w-0 flex-1">{toast.message}</span>
       {toast.action && (
         <button
           onClick={handleActionClick}

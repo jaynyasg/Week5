@@ -4,7 +4,7 @@ import { ErrorBoundary } from '@/components/ui/ErrorBoundary';
 import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/hooks/useAuth';
 import { useFocusOnNavigate } from '@/hooks/useFocusOnNavigate';
-import { useRealtimeEvent } from '@/hooks/useRealtimeEvents';
+import { useRealtimeEvent, type RealtimeEvent } from '@/hooks/useRealtimeEvents';
 import { useWorkspace } from '@/contexts/WorkspaceContext';
 import { ArchiveIcon } from '@/components/icons/ArchiveIcon';
 import { useDocuments, WikiDocument } from '@/contexts/DocumentsContext';
@@ -34,7 +34,8 @@ import { ActionItemsModal } from '@/components/ActionItemsModal';
 import { AccountabilityBanner } from '@/components/AccountabilityBanner';
 import { ProjectContextSidebar } from '@/components/sidebars/ProjectContextSidebar';
 import { AskShipButton } from '@/components/assistant/AskShipButton';
-import { AskShipPanel } from '@/components/assistant/AskShipPanel';
+import { AskShipPanel, type AssistantPanelMode } from '@/components/assistant/AskShipPanel';
+import { fleetGraphKeys } from '@/hooks/useFleetGraph';
 
 type Mode = 'docs' | 'issues' | 'projects' | 'programs' | 'sprints' | 'team' | 'settings' | 'dashboard' | 'project-context';
 
@@ -55,6 +56,8 @@ export function AppLayout() {
   const [projectSetupWizardOpen, setProjectSetupWizardOpen] = useState(false);
   const [actionItemsModalOpen, setActionItemsModalOpen] = useState(false);
   const [askShipOpen, setAskShipOpen] = useState(false);
+  const [assistantMode, setAssistantMode] = useState<AssistantPanelMode>('ask');
+  const [fleetGraphUnreadCount, setFleetGraphUnreadCount] = useState(0);
   const [actionItemsModalShownOnLoad, setActionItemsModalShownOnLoad] = useState(false);
 
   // Session timeout handling
@@ -81,6 +84,7 @@ export function AppLayout() {
   const { data: actionItemsData } = useActionItemsQuery();
   const hasActionItems = (actionItemsData?.items?.length ?? 0) > 0;
   const queryClient = useQueryClient();
+  const { showToast } = useToast();
 
   // Celebration state for when user completes an accountability item
   const [isCelebrating, setIsCelebrating] = useState(false);
@@ -106,6 +110,31 @@ export function AppLayout() {
   }, [queryClient]);
 
   useRealtimeEvent('accountability:updated', handleAccountabilityUpdate);
+
+  const handleFleetGraphFindingDelivered = useCallback((event: RealtimeEvent) => {
+    const payload = event.data as {
+      severity?: string;
+      title?: string;
+      actionRequired?: boolean;
+    };
+    const severity = payload.severity ?? 'info';
+    const actionRequired = Boolean(payload.actionRequired);
+
+    setFleetGraphUnreadCount((count) => Math.max(1, count + 1));
+    void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findings });
+
+    if (actionRequired || severity === 'high' || severity === 'critical') {
+      showToast(payload.title ?? 'FleetGraph finding', severity === 'critical' ? 'error' : 'info', 7000, {
+        label: 'View',
+        onClick: () => {
+          setAssistantMode('fleetgraph');
+          setAskShipOpen(true);
+        },
+      });
+    }
+  }, [queryClient, showToast]);
+
+  useRealtimeEvent('fleetgraph:finding-delivered', handleFleetGraphFindingDelivered);
 
   // Cleanup celebration timeout on unmount
   useEffect(() => {
@@ -399,6 +428,7 @@ export function AppLayout() {
             />
             <AskShipButton
               active={askShipOpen}
+              badgeCount={fleetGraphUnreadCount}
               onClick={() => setAskShipOpen((open) => !open)}
             />
           </div>
@@ -597,6 +627,10 @@ export function AppLayout() {
         open={askShipOpen}
         onOpenChange={setAskShipOpen}
         context={assistantContext}
+        mode={assistantMode}
+        onModeChange={setAssistantMode}
+        fleetGraphUnreadCount={fleetGraphUnreadCount}
+        onFleetGraphUnreadCountChange={setFleetGraphUnreadCount}
       />
     </div>
     </SelectionPersistenceProvider>
