@@ -94,7 +94,7 @@ export function FleetGraphFindingDetail({
           type="button"
           disabled={updatingDelivery}
           onClick={() => onDeliveryUpdate('snoozed', new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString())}
-          className="min-h-9 flex-1 rounded-md border border-border px-3 text-sm text-foreground hover:bg-border/50 disabled:cursor-not-allowed disabled:text-muted"
+          className="min-h-11 flex-1 rounded-md border border-border px-3 text-sm text-foreground hover:bg-border/50 disabled:cursor-not-allowed disabled:text-muted sm:min-h-9"
         >
           Snooze
         </button>
@@ -102,7 +102,7 @@ export function FleetGraphFindingDetail({
           type="button"
           disabled={updatingDelivery}
           onClick={() => onDeliveryUpdate('dismissed')}
-          className="min-h-9 flex-1 rounded-md border border-border px-3 text-sm text-foreground hover:bg-border/50 disabled:cursor-not-allowed disabled:text-muted"
+          className="min-h-11 flex-1 rounded-md border border-border px-3 text-sm text-foreground hover:bg-border/50 disabled:cursor-not-allowed disabled:text-muted sm:min-h-9"
         >
           Dismiss
         </button>

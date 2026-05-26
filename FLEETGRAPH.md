@@ -509,7 +509,7 @@ Required implementation tests:
 - E2E or integration test for approve/reject action proposal flow.
 - UI tests for empty, loading, error, unavailable, missing evidence, snoozed, dismissed, rejected action, action-error, and trace-present/missing states.
 - Accessibility checks for keyboard navigation, focus order, live regions, and contrast in the FleetGraph drawer; component-level live-region and row-label coverage is in place.
-- Mobile viewport check for full-screen drawer behavior and composer/toast overlap.
+- Mobile checks for full-screen drawer behavior, touch targets, and composer/toast overlap; component-level responsive contract coverage is in place.
 - Trace validation with at least two shared LangSmith links before submission.
 
 ### Current Implementation Validation
@@ -523,7 +523,7 @@ Passing local checks:
 - `pnpm build:web`
 - `pnpm --filter @ship/api test:fleetgraph-eval`
 - `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1`
-- focused FleetGraph web hook and drawer tests
+- focused FleetGraph web hook, drawer, responsive panel, and toast tests
 - `git diff --check`
 - pre-commit empty-test check
 
@@ -535,6 +535,7 @@ Current deterministic evidence:
 - `api/src/routes/fleetgraph.test.ts` covers authentication, CSRF, per-user delivery visibility, admin run/finding access, action-decision authorization, and audit logging with run/trace metadata.
 - `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx` covers delivered findings, loading/empty/error/unavailable states, missing evidence, snooze/dismiss actions, rejected action decisions, action errors, and trace-present/missing run metadata.
 - `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx` also verifies announced status/alert regions and accessible finding row labels for unread severity state.
+- `web/src/components/assistant/AskShipPanel.test.tsx`, `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx`, and `web/src/components/ui/Toast.test.tsx` verify the FleetGraph drawer's mobile full-width class contract, 44px mobile action targets, and mobile toast offset above the pinned composer.
 - `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus the no-finding branch: week planning gap, project churn/stalled issues, stale engineer issue, approved-plan-change HITL, missing ownership, context chat, and no-finding.
 
 Blocked until local PostgreSQL is running:

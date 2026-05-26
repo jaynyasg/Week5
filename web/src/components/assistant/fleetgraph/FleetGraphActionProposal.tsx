@@ -43,7 +43,7 @@ export function FleetGraphActionProposal({ proposal, deciding, error, onDecision
               type="button"
               disabled={deciding}
               onClick={() => onDecision(proposal.id, { status: 'approved', note: note || undefined })}
-              className="min-h-9 flex-1 rounded-md bg-accent px-3 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-border disabled:text-muted"
+              className="min-h-11 flex-1 rounded-md bg-accent px-3 text-sm font-medium text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-border disabled:text-muted sm:min-h-9"
             >
               Approve
             </button>
@@ -51,7 +51,7 @@ export function FleetGraphActionProposal({ proposal, deciding, error, onDecision
               type="button"
               disabled={deciding}
               onClick={() => onDecision(proposal.id, { status: 'rejected', note: note || undefined })}
-              className="min-h-9 flex-1 rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-border/50 disabled:cursor-not-allowed disabled:text-muted"
+              className="min-h-11 flex-1 rounded-md border border-border px-3 text-sm font-medium text-foreground transition-colors hover:bg-border/50 disabled:cursor-not-allowed disabled:text-muted sm:min-h-9"
             >
               Reject
             </button>

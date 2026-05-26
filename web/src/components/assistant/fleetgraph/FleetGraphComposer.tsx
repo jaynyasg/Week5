@@ -19,7 +19,7 @@ export function FleetGraphComposer({ disabled, maxLength = 4000, findingId, onSe
   };
 
   return (
-    <form onSubmit={handleSubmit} className="border-t border-border p-3">
+    <form onSubmit={handleSubmit} className="shrink-0 border-t border-border p-3">
       <div className="flex items-end gap-2 rounded-lg border border-border bg-background p-2 focus-within:border-accent">
         <textarea
           value={value}
@@ -34,7 +34,7 @@ export function FleetGraphComposer({ disabled, maxLength = 4000, findingId, onSe
         <button
           type="submit"
           disabled={disabled || !value.trim()}
-          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md bg-accent text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-border disabled:text-muted"
+          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-md bg-accent text-white transition-colors hover:bg-accent/90 disabled:cursor-not-allowed disabled:bg-border disabled:text-muted sm:h-9 sm:w-9"
           aria-label="Send FleetGraph message"
         >
           <SendIcon />

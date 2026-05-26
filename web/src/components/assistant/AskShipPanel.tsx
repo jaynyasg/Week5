@@ -49,12 +49,12 @@ export function AskShipPanel({
 
   return (
     <div
-      className="fixed inset-y-0 right-0 z-40 flex w-full max-w-[420px] flex-col border-l border-border bg-background shadow-2xl"
+      className="fixed inset-y-0 right-0 z-40 flex w-full flex-col border-l border-border bg-background shadow-2xl sm:max-w-[420px]"
       role="dialog"
       aria-label="Ask Ship"
       aria-modal="false"
     >
-      <header className="flex h-12 items-center justify-between border-b border-border px-4">
+      <header className="flex h-12 shrink-0 items-center justify-between border-b border-border px-4">
         <div>
           <h2 className="text-sm font-semibold text-foreground">Assistant</h2>
           <p className="text-xs text-muted">{mode === 'ask' ? statusText(assistant.statusLoading, assistant.status?.available) : 'FleetGraph'}</p>
@@ -69,7 +69,7 @@ export function AskShipPanel({
         </button>
       </header>
 
-      <div className="flex border-b border-border p-2" role="tablist" aria-label="Assistant mode">
+      <div className="flex shrink-0 border-b border-border p-2" role="tablist" aria-label="Assistant mode">
         <TabButton active={mode === 'ask'} onClick={() => onModeChange('ask')}>
           Ask Ship
         </TabButton>

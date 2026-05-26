@@ -57,7 +57,12 @@ describe('FleetGraphPanel', () => {
     render(<FleetGraphPanel />);
 
     expect(screen.getByText('request update')).toBeInTheDocument();
-    fireEvent.click(screen.getByRole('button', { name: 'Approve' }));
+    const approveButton = screen.getByRole('button', { name: 'Approve' });
+    const rejectButton = screen.getByRole('button', { name: 'Reject' });
+    expect(approveButton).toHaveClass('min-h-11');
+    expect(approveButton).toHaveClass('sm:min-h-9');
+    expect(rejectButton).toHaveClass('min-h-11');
+    fireEvent.click(approveButton);
 
     expect(decideAction).toHaveBeenCalledWith('proposal-1', {
       status: 'approved',
@@ -135,13 +140,18 @@ describe('FleetGraphPanel', () => {
 
     render(<FleetGraphPanel />);
 
-    fireEvent.click(screen.getByRole('button', { name: 'Snooze' }));
+    const snoozeButton = screen.getByRole('button', { name: 'Snooze' });
+    const dismissButton = screen.getByRole('button', { name: 'Dismiss' });
+    expect(snoozeButton).toHaveClass('min-h-11');
+    expect(dismissButton).toHaveClass('min-h-11');
+
+    fireEvent.click(snoozeButton);
     expect(updateSelectedDelivery).toHaveBeenCalledWith(
       'snoozed',
       '2026-05-26T12:00:00.000Z',
     );
 
-    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    fireEvent.click(dismissButton);
     expect(updateSelectedDelivery).toHaveBeenCalledWith('dismissed');
     expect(screen.getByText('No LangSmith trace recorded.')).toBeInTheDocument();
   });
@@ -162,6 +172,8 @@ describe('FleetGraphPanel', () => {
 
     expect(screen.getByText('No evidence attached.')).toBeInTheDocument();
     expect(screen.getByRole('alert')).toHaveTextContent('Action update failed.');
+    expect(screen.getByRole('button', { name: 'Send FleetGraph message' })).toHaveClass('h-11');
+    expect(screen.getByRole('button', { name: 'Send FleetGraph message' })).toHaveClass('sm:h-9');
 
     fireEvent.change(screen.getByLabelText('FleetGraph action decision note'), {
       target: { value: 'Needs more context' },

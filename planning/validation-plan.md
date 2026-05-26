@@ -212,6 +212,7 @@ Completed locally:
 - `pnpm build:api`
 - `pnpm build:web`
 - `pnpm --filter @ship/web exec vitest run src/hooks/useFleetGraph.test.tsx src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx`
+- `pnpm --filter @ship/web exec vitest run src/components/assistant/AskShipPanel.test.tsx src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx src/components/ui/Toast.test.tsx`
 - `pnpm --filter @ship/api test:fleetgraph-eval`
 - `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1`
 - `git diff --check`
@@ -225,6 +226,7 @@ New deterministic coverage:
 - `api/src/routes/fleetgraph.test.ts` now covers FleetGraph auth, CSRF, per-user delivery visibility, admin access, action-decision authorization, and action-decision audit logging with run/trace metadata.
 - `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx` covers FleetGraph drawer loading, empty, error, unavailable, missing evidence, snooze/dismiss, rejected decision, action-error, and trace-present/missing states.
 - `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx` also covers component-level accessibility semantics for status regions, alert regions, and finding row accessible labels.
+- `web/src/components/assistant/AskShipPanel.test.tsx`, `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx`, and `web/src/components/ui/Toast.test.tsx` cover the mobile drawer width contract, 44px FleetGraph mobile action targets, and mobile toast offset above the pinned composer.
 - `pnpm --filter @ship/api test:fleetgraph-eval` now runs the focused no-database FleetGraph suite for costs, deterministic eval paths, and run usage estimation.
 
 Blocked locally:
