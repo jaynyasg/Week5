@@ -429,12 +429,12 @@ flowchart TD
 
 | # | Role | Trigger | Detection or Output | Human Approval | Trace |
 |---|---|---|---|---|---|
-| 1 | PM | Week starts without an approved plan | Finding on the week, notify week owner and approver | Required only if FleetGraph proposes creating/changing plan content | LangSmith TBD; deterministic DB/E2E evidence passed 2026-05-26 |
-| 2 | Director | Project has repeated scope churn or stalled issues | Project risk finding with evidence from issues and timeline | Required before changing project status or assignments | LangSmith TBD; deterministic eval evidence passed 2026-05-25 |
-| 3 | Engineer | Assigned issue is stale or blocked | Finding explaining blocker, likely next step, and owner | Required before changing issue status/assignee | LangSmith TBD; deterministic eval evidence passed 2026-05-25 |
-| 4 | PM | Approved plan changes after approval | Finding that re-review is needed with changed document link | Required for any approval/unapproval action | LangSmith TBD; HITL API/UI evidence passed 2026-05-26 |
-| 5 | Director | Program has projects with missing accountable/owner data | Finding listing affected projects and suggested owners to confirm | Required before changing RACI fields | LangSmith TBD; deterministic eval evidence passed 2026-05-25 |
-| 6 | User | Opens FleetGraph from a project or week | Context-aware chat answer grounded in current view | Required before executing any mutation proposed in chat | LangSmith TBD; deterministic chat/E2E evidence passed 2026-05-26 |
+| 1 | PM | Week starts without an approved plan | Finding on the week, notify week owner and approver | Required only if FleetGraph proposes creating/changing plan content | [Proactive finding trace](https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r) |
+| 2 | Director | Project has repeated scope churn or stalled issues | Project risk finding with evidence from issues and timeline | Required before changing project status or assignments | Deterministic eval covers path; shared LangSmith trace not required for minimum set |
+| 3 | Engineer | Assigned issue is stale or blocked | Finding explaining blocker, likely next step, and owner | Required before changing issue status/assignee | Deterministic eval covers path; shared LangSmith trace not required for minimum set |
+| 4 | PM | Approved plan changes after approval | Finding that re-review is needed with changed document link | Required for any approval/unapproval action | [HITL action proposal trace](https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r) |
+| 5 | Director | Program has projects with missing accountable/owner data | Finding listing affected projects and suggested owners to confirm | Required before changing RACI fields | Deterministic eval covers path; shared LangSmith trace not required for minimum set |
+| 6 | User | Opens FleetGraph from a project or week | Context-aware chat answer grounded in current view | Required before executing any mutation proposed in chat | [On-demand chat trace](https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r) |
 
 ## Human-in-the-Loop Experience
 
@@ -463,6 +463,12 @@ Every completed or failed FleetGraph run should store:
 - Error details safe for internal inspection.
 
 Shared trace links must be reviewed before submission because public LangSmith trace links can expose sensitive information. Do not put secrets, full session cookies, bearer tokens, or irrelevant personal data in graph state or trace metadata.
+
+Shared LangSmith evidence captured on 2026-05-26:
+
+- Proactive finding-only path: [trace](https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r), Ship run `f25df8ca-e643-45a7-bf6e-e4ca21bb902d`, LangSmith trace `019e6558-35a9-747f-98fd-b1a040f42060`.
+- HITL/action proposal path: [trace](https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r), Ship run `2328e746-019a-46cd-896f-1dc3a51ea045`, LangSmith trace `019e6553-20ef-779f-8273-c42d9ea4cd25`.
+- On-demand chat path: [trace](https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r), Ship run `8ff69405-894c-4cc4-a7bc-3a1a2dd04764`, LangSmith trace `019e6552-9dd5-73a4-a7ba-7f6e65c967e6`.
 
 ## Performance and Cost
 
@@ -496,8 +502,11 @@ Measured validation run rows:
 | 2026-05-26 | E2E seed `fleetgraph_runs` row | proactive | `mock` / `mock-fleetgraph` | 1,200 | 280 | Stored seed estimate at current `gpt-4o-mini` text pricing | $0.000348 |
 | 2026-05-26 | Isolated Docker Postgres `fleetgraph_runs` row | chat | `mock` / `mock-fleetgraph` | 787 | 149 | Recomputed `gpt-4o-mini` equivalent from actual run tokens | $0.000207 |
 | 2026-05-26 | Isolated Docker Postgres `fleetgraph_runs` row | chat | `mock` / `mock-fleetgraph` | 0 | 0 | No provider usage captured for this validation row | $0.000000 |
+| 2026-05-26 | Shared LangSmith proactive finding run | proactive | `openai` / `gpt-4o-mini` | 1,050 | 245 | Stored FleetGraph usage estimate | $0.000305 |
+| 2026-05-26 | Shared LangSmith HITL action proposal run | proactive | `openai` / `gpt-4o-mini` | 1,310 | 325 | Stored FleetGraph usage estimate | $0.000392 |
+| 2026-05-26 | Shared LangSmith on-demand chat run | chat | `openai` / `gpt-4o-mini` | 973 | 162 | Stored FleetGraph usage estimate | $0.000243 |
 
-These rows prove run usage capture and cost math paths. Actual billable spend and shared LangSmith trace URLs still require model-backed runs with `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, and `LANGSMITH_PROJECT` configured.
+These rows prove run usage capture, cost math, and LangSmith traceability paths. The current FleetGraph graph is deterministic LangGraph logic, so the local rows store FleetGraph usage estimates rather than provider-reported LLM token payloads.
 
 Starter projection to replace with real `fleetgraph_runs` measurements:
 
@@ -557,11 +566,10 @@ Current deterministic evidence:
 - DB-backed validation completed against isolated Docker Postgres on 2026-05-26: `pnpm --filter @ship/api test:fleetgraph-api` passed 22 tests, and the focused FleetGraph OpenAPI/route run passed 17 tests.
 - FleetGraph E2E completed on 2026-05-26 with `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1`: 2 passed, including the timed event-to-finding path under the 5 minute requirement.
 
-External evidence still blocked in this environment:
+Remaining external evidence:
 
-- Model-backed LangSmith traces need `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, and `LANGSMITH_PROJECT`; none were present in the local process on 2026-05-26.
 - Public deployment verification needs Render credentials or a known deployed URL; no `RENDER_API_KEY` or FleetGraph public URL was present in the local process on 2026-05-26.
-- Actual billable cost rows should be regenerated from deployed or locally configured model-backed `fleetgraph_runs` rows once the provider and tracing credentials are available.
+- Deployed billable cost rows should be regenerated from deployed `fleetgraph_runs` rows after Render verification.
 
 ## Implementation Tasks
 

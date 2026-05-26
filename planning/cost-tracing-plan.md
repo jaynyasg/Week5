@@ -164,8 +164,11 @@ Add a table to final `FLEETGRAPH.md`.
 | 2026-05-26 | proactive seed | 1 | 1,200 | 280 | $0.000348 | Actual E2E seed `fleetgraph_runs` row using mock provider; stored estimate matches current `gpt-4o-mini` pricing |
 | 2026-05-26 | on-demand chat validation | 1 | 787 | 149 | $0.000207 | Actual isolated Docker Postgres `fleetgraph_runs` row using mock provider; cost recomputed as `gpt-4o-mini` equivalent |
 | 2026-05-26 | on-demand chat validation | 1 | 0 | 0 | $0.000000 | Actual isolated Docker Postgres `fleetgraph_runs` row with no provider usage captured |
+| 2026-05-26 | proactive finding trace | 1 | 1,050 | 245 | $0.000305 | Local OpenAI-provider FleetGraph run `f25df8ca-e643-45a7-bf6e-e4ca21bb902d`; shared LangSmith trace captured |
+| 2026-05-26 | HITL action proposal trace | 1 | 1,310 | 325 | $0.000392 | Local OpenAI-provider FleetGraph run `2328e746-019a-46cd-896f-1dc3a51ea045`; shared LangSmith trace captured |
+| 2026-05-26 | on-demand chat trace | 1 | 973 | 162 | $0.000243 | Local OpenAI-provider FleetGraph run `8ff69405-894c-4cc4-a7bc-3a1a2dd04764`; shared LangSmith trace captured |
 
-Actual billable spend remains pending until FleetGraph is run with model provider credentials. On 2026-05-26 the local process did not include `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, or `LANGSMITH_PROJECT`.
+Deployed billable spend remains pending until FleetGraph is verified on Render. The local trace rows above use FleetGraph's stored usage estimates with the OpenAI provider configured.
 
 ## Production Projection Table
 

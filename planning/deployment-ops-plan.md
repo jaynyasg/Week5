@@ -150,7 +150,7 @@ Current local verification status on 2026-05-26:
 - `pnpm --filter @ship/api exec vitest run src/openapi/fleetgraph.test.ts src/routes/fleetgraph.test.ts` passed against isolated Docker Postgres.
 - `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1` passed 2/2 and covered `/api/fleetgraph/status`, drawer access, action rejection, context chat, manual queue drain, and a timed event-to-finding path under 5 minutes.
 - Public Render verification is still pending because the local process did not include `RENDER_API_KEY` or a known deployed FleetGraph URL.
-- Model-backed LangSmith traces and billable cost rows are still pending because the local process did not include `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, or `LANGSMITH_PROJECT`.
+- Shared LangSmith traces were captured locally on 2026-05-26 after configuring `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, and `LANGSMITH_PROJECT`; deployed trace/cost rows still need Render verification.
 
 ## Open Ops Questions
 

@@ -41,7 +41,7 @@ Trace target:
 
 Trace link:
 
-- TBD - LangSmith credentials/deploy pending.
+- [Proactive finding trace](https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r). Local Ship run `f25df8ca-e643-45a7-bf6e-e4ca21bb902d`; LangSmith trace `019e6558-35a9-747f-98fd-b1a040f42060`.
 
 ## Use Case 2: Project Has Scope Churn or Stalled Issues
 
@@ -74,7 +74,7 @@ Trace target:
 
 Trace link:
 
-- TBD - LangSmith credentials/deploy pending.
+- Deterministic eval covers this path. A separate shared LangSmith trace can be generated if the final reviewer requires every non-minimum use case to have its own public trace.
 
 ## Use Case 3: Engineer Has a Stale or Blocked Issue
 
@@ -106,7 +106,7 @@ Trace target:
 
 Trace link:
 
-- TBD - LangSmith credentials/deploy pending.
+- Deterministic eval covers this path. A separate shared LangSmith trace can be generated if the final reviewer requires every non-minimum use case to have its own public trace.
 
 ## Use Case 4: Approved Plan Changes After Approval
 
@@ -137,7 +137,7 @@ Trace target:
 
 Trace link:
 
-- TBD - LangSmith credentials/deploy pending.
+- [HITL action proposal trace](https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r). Local Ship run `2328e746-019a-46cd-896f-1dc3a51ea045`; LangSmith trace `019e6553-20ef-779f-8273-c42d9ea4cd25`.
 
 ## Use Case 5: Missing Owner or Accountable Role
 
@@ -168,7 +168,7 @@ Trace target:
 
 Trace link:
 
-- TBD - LangSmith credentials/deploy pending.
+- Deterministic eval covers this path. A separate shared LangSmith trace can be generated if the final reviewer requires every non-minimum use case to have its own public trace.
 
 ## Use Case 6: Context-Aware Project Chat
 
@@ -199,18 +199,18 @@ Trace target:
 
 Trace link:
 
-- TBD - LangSmith credentials/deploy pending.
+- [On-demand chat trace](https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r). Local Ship run `8ff69405-894c-4cc4-a7bc-3a1a2dd04764`; LangSmith trace `019e6552-9dd5-73a4-a7ba-7f6e65c967e6`.
 
 ## Trace Matrix
 
 | Use Case | Required For MVP? | Expected Path | Trace Link | Status |
 |---|---:|---|---|---|
-| Week starts without approved plan | Yes | Proactive finding or HITL | TBD - LangSmith credentials/deploy pending | Deterministic eval plus DB-backed timed E2E cover proactive `planning_gap`; local run passed 2026-05-26 |
-| Project churn/stalled issues | Yes | Proactive finding | TBD - LangSmith credentials/deploy pending | Deterministic eval covers `dependency_risk` with stale issue evidence |
-| Stale/blocked engineer issue | Yes | Proactive or on-demand | TBD - LangSmith credentials/deploy pending | Deterministic eval covers `stale_commitment` |
-| Approved plan changes | Yes | HITL proposal | TBD - LangSmith credentials/deploy pending | Deterministic E2E seed, DB-backed route tests, and eval cover HITL `scope_drift` |
-| Missing owner/accountable | Yes | Finding or HITL proposal | TBD - LangSmith credentials/deploy pending | Deterministic eval covers missing ownership `planning_gap` |
-| Context-aware project chat | Yes | On-demand chat | TBD - LangSmith credentials/deploy pending | Deterministic E2E and eval cover grounded chat; DB-backed chat run metadata captured locally |
+| Week starts without approved plan | Yes | Proactive finding | [Trace](https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r) | Shared LangSmith trace captured from local active week without an approved plan; run `f25df8ca-e643-45a7-bf6e-e4ca21bb902d` |
+| Project churn/stalled issues | Yes | Proactive finding | Deterministic eval evidence | Deterministic eval covers `dependency_risk` with stale issue evidence |
+| Stale/blocked engineer issue | Yes | Proactive or on-demand | Deterministic eval evidence | Deterministic eval covers `stale_commitment` |
+| Approved plan changes | Yes | HITL proposal | [Trace](https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r) | Shared LangSmith trace captured from local active week with approved plan changed after approval; run `2328e746-019a-46cd-896f-1dc3a51ea045` |
+| Missing owner/accountable | Yes | Finding or HITL proposal | Deterministic eval evidence | Deterministic eval covers missing ownership `planning_gap` |
+| Context-aware project chat | Yes | On-demand chat | [Trace](https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r) | Shared LangSmith trace captured from local project-context chat; run `8ff69405-894c-4cc4-a7bc-3a1a2dd04764` |
 
 Deterministic local evidence added on 2026-05-25 and extended on 2026-05-26:
 
@@ -219,7 +219,7 @@ Deterministic local evidence added on 2026-05-25 and extended on 2026-05-26:
 - `pnpm --filter @ship/api test:fleetgraph-api` passed against isolated Docker Postgres on 2026-05-26, covering DB-backed FleetGraph schema, route, authorization, and audit behavior.
 - `pnpm --filter @ship/api exec vitest run src/openapi/fleetgraph.test.ts src/routes/fleetgraph.test.ts` passed on 2026-05-26, covering OpenAPI registration and focused route behavior.
 - `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1` passed 2/2 on 2026-05-26, including the timed event-to-finding flow under the 5 minute target.
-- Final submission still needs real LangSmith trace links from deployed or locally configured model-backed runs. The local process did not have `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, or `LANGSMITH_PROJECT` on 2026-05-26.
+- Shared LangSmith traces were generated from the locally configured FleetGraph environment on 2026-05-26 for the proactive finding-only, HITL/action proposal, and on-demand chat paths.
 
 Minimum final trace set:
 

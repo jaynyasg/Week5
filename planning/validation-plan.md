@@ -197,9 +197,10 @@ pnpm build
 | Proactive detection | E2E/timed run | Timed local E2E event-to-finding passed on 2026-05-26; deployed/model-backed run pending |
 | On-demand chat | UI/E2E run | Deterministic E2E passed |
 | HITL gate | API + UI test | Deterministic E2E reject flow passed; DB-backed API authorization and audit tests passed on 2026-05-26 |
-| Trace link 1 | LangSmith | Blocked locally: no `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, or `LANGSMITH_PROJECT` |
-| Trace link 2 | LangSmith | Blocked locally: no `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, or `LANGSMITH_PROJECT` |
-| Cost per run | `fleetgraph_runs` + provider metadata | Mock-provider run rows captured and priced with current `gpt-4o-mini`; billable model-backed rows pending |
+| Trace link 1 | LangSmith | Proactive finding-only trace shared: https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r |
+| Trace link 2 | LangSmith | HITL/action proposal trace shared: https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r |
+| Optional trace link 3 | LangSmith | On-demand chat trace shared: https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r |
+| Cost per run | `fleetgraph_runs` + provider metadata | Local OpenAI-provider run rows captured and priced with current `gpt-4o-mini`; deployed billable rows pending |
 | Public deployment | Render URL | Blocked locally: no `RENDER_API_KEY` or known FleetGraph deployment URL |
 
 ## Implementation Validation Snapshot
@@ -236,9 +237,9 @@ New deterministic coverage:
 - `pnpm --filter @ship/api test:fleetgraph-api` passed 22 DB-backed tests against isolated Docker Postgres on 2026-05-26.
 - `pnpm --filter @ship/api exec vitest run src/openapi/fleetgraph.test.ts src/routes/fleetgraph.test.ts` passed 17 focused OpenAPI/route tests against isolated Docker Postgres on 2026-05-26.
 - `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1` passed 2/2 on 2026-05-26, including the timed event-to-finding flow.
+- Shared LangSmith traces captured on 2026-05-26 cover the proactive finding-only path, HITL/action proposal path, and optional on-demand chat path.
 
 External blockers:
 
-- Model-backed LangSmith traces cannot be generated in this environment until `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, and `LANGSMITH_PROJECT` are provided.
 - Public Render verification cannot be completed in this environment until `RENDER_API_KEY` or a known deployed FleetGraph URL is provided.
-- Billable cost rows should be regenerated from deployed or locally configured model-backed `fleetgraph_runs` rows after provider credentials are present.
+- Billable cost rows should be regenerated from deployed `fleetgraph_runs` rows after Render verification.
