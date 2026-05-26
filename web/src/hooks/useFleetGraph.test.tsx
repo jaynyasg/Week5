@@ -50,6 +50,20 @@ describe('useFleetGraph', () => {
     expect(result.current.findings[0]?.title).toBe('Week plan needs approval');
   });
 
+  it('loads findings with current route context', async () => {
+    getFleetGraphStatusMock.mockResolvedValue(statusResponse);
+    getFleetGraphFindingsMock.mockResolvedValue({ findings: [], deliveries: [] });
+
+    const context = {
+      path: '/documents/11111111-1111-4111-8111-111111111111',
+      documentId: '11111111-1111-4111-8111-111111111111',
+      projectId: '22222222-2222-4222-8222-222222222222',
+    };
+    renderHook(() => useFleetGraph(context), { wrapper: queryWrapper() });
+
+    await waitFor(() => expect(getFleetGraphFindingsMock).toHaveBeenCalledWith(context));
+  });
+
   it('sends chat with route context and appends the assistant response', async () => {
     getFleetGraphStatusMock.mockResolvedValue(statusResponse);
     getFleetGraphFindingsMock.mockResolvedValue({ findings: [], deliveries: [] });

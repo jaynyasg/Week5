@@ -13,4 +13,14 @@ describe('FleetGraph OpenAPI schema', () => {
     expect(document.paths['/fleetgraph/runs/{id}']).toBeDefined();
     expect(document.paths['/fleetgraph/actions/{id}/decision']).toBeDefined();
   });
+
+  it('documents route-context filters for delivered findings', () => {
+    const document = generateOpenAPIDocument();
+    const operation = document.paths['/fleetgraph/findings']?.get;
+
+    expect(operation?.parameters).toEqual(expect.arrayContaining([
+      expect.objectContaining({ name: 'documentId', in: 'query' }),
+      expect.objectContaining({ name: 'projectId', in: 'query' }),
+    ]));
+  });
 });

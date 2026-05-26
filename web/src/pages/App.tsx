@@ -121,7 +121,7 @@ export function AppLayout() {
     const actionRequired = Boolean(payload.actionRequired);
 
     setFleetGraphUnreadCount((count) => Math.max(1, count + 1));
-    void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findings });
+    void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findingsRoot });
 
     if (actionRequired || severity === 'high' || severity === 'critical') {
       showToast(payload.title ?? 'FleetGraph finding', severity === 'critical' ? 'error' : 'info', 7000, {

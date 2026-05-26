@@ -19,7 +19,12 @@ import {
 
 export const fleetGraphKeys = {
   status: ['fleetgraph', 'status'] as const,
-  findings: ['fleetgraph', 'findings'] as const,
+  findingsRoot: ['fleetgraph', 'findings'] as const,
+  findings: (context?: AssistantRouteContext) => [
+    ...fleetGraphKeys.findingsRoot,
+    context?.documentId ?? null,
+    context?.projectId ?? null,
+  ] as const,
   finding: (id?: string | null) => ['fleetgraph', 'finding', id] as const,
   run: (id?: string | null) => ['fleetgraph', 'run', id] as const,
 };
@@ -44,8 +49,8 @@ export function useFleetGraph(context?: AssistantRouteContext) {
   });
 
   const findingsQuery = useQuery({
-    queryKey: fleetGraphKeys.findings,
-    queryFn: getFleetGraphFindings,
+    queryKey: fleetGraphKeys.findings(context),
+    queryFn: () => getFleetGraphFindings(context),
     staleTime: 30_000,
   });
 
@@ -85,7 +90,7 @@ export function useFleetGraph(context?: AssistantRouteContext) {
           response,
         },
       ]);
-      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findings });
+      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findingsRoot });
     },
   });
 
@@ -93,7 +98,7 @@ export function useFleetGraph(context?: AssistantRouteContext) {
     mutationFn: ({ id, status, snoozedUntil }: { id: string; status: 'read' | 'dismissed' | 'snoozed'; snoozedUntil?: string }) =>
       updateFleetGraphDelivery(id, status, snoozedUntil),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findings });
+      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findingsRoot });
     },
   });
 
@@ -101,7 +106,7 @@ export function useFleetGraph(context?: AssistantRouteContext) {
     mutationFn: ({ id, decision }: { id: string; decision: FleetGraphActionDecisionRequest }) =>
       decideFleetGraphAction(id, decision),
     onSuccess: (_proposal, variables) => {
-      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findings });
+      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findingsRoot });
       void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.finding(selectedFindingId) });
       void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.run(selectedRunId) });
       setMessages((current) => [
@@ -186,7 +191,7 @@ export function useFleetGraph(context?: AssistantRouteContext) {
     decidingAction: decisionMutation.isPending,
     decisionError: decisionMutation.error,
     refresh: () => {
-      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findings });
+      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findingsRoot });
     },
     reset: () => setMessages([]),
   };

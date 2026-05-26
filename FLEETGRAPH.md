@@ -523,7 +523,7 @@ Passing local checks:
 - `pnpm build:web`
 - `pnpm --filter @ship/api test:fleetgraph-eval`
 - `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1`
-- focused FleetGraph web hook, drawer, responsive panel, and toast tests
+- focused FleetGraph web hook, drawer, responsive panel, toast, and route-context tests
 - `git diff --check`
 - pre-commit empty-test check
 
@@ -532,7 +532,8 @@ Current deterministic evidence:
 - `e2e/fixtures/isolated-env.ts` seeds a completed proactive FleetGraph run, a delivered unread finding, and a pending human action proposal.
 - `e2e/fleetgraph.spec.ts` opens FleetGraph from a Ship document, marks the delivered finding read, rejects the action proposal with a note, and verifies contextual chat response grounding.
 - `e2e/fleetgraph.spec.ts` also creates a real sprint document event, drains the FleetGraph queue against the isolated test database, verifies a delivered planning-gap finding appears in the drawer within the 5 minute latency target, and confirms the linked `fleetgraph_runs` row records token/cost metadata.
-- `api/src/routes/fleetgraph.test.ts` covers authentication, CSRF, per-user delivery visibility, admin run/finding access, action-decision authorization, and audit logging with run/trace metadata.
+- `api/src/routes/fleetgraph.test.ts` covers authentication, CSRF, per-user delivery visibility, route-context finding filters, admin run/finding access, action-decision authorization, and audit logging with run/trace metadata.
+- `web/src/hooks/useFleetGraph.test.tsx` verifies the current Ship route context is used for both findings fetches and on-demand chat requests.
 - `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx` covers delivered findings, loading/empty/error/unavailable states, missing evidence, snooze/dismiss actions, rejected action decisions, action errors, and trace-present/missing run metadata.
 - `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx` also verifies announced status/alert regions and accessible finding row labels for unread severity state.
 - `web/src/components/assistant/AskShipPanel.test.tsx`, `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx`, and `web/src/components/ui/Toast.test.tsx` verify the FleetGraph drawer's mobile full-width class contract, 44px mobile action targets, and mobile toast offset above the pinned composer.
@@ -540,7 +541,7 @@ Current deterministic evidence:
 
 Blocked until local PostgreSQL is running:
 
-- `pnpm --filter @ship/api test:fleetgraph-api` currently fails in shared setup with `ECONNREFUSED` on `localhost:5432` before FleetGraph assertions run.
+- `pnpm --filter @ship/api test:fleetgraph-api` and focused DB-backed API/OpenAPI runs currently fail in shared setup with `ECONNREFUSED` on `localhost:5432` before FleetGraph assertions run.
 
 Pending final submission evidence:
 

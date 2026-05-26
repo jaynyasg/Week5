@@ -37,6 +37,11 @@ const chatSchema = z.object({
   findingId: z.string().uuid().optional(),
 });
 
+const findingsQuerySchema = z.object({
+  documentId: z.string().uuid().optional(),
+  projectId: z.string().uuid().optional(),
+});
+
 const deliveryUpdateSchema = z.object({
   status: z.enum(['read', 'dismissed', 'snoozed']),
   snoozedUntil: z.string().datetime().optional(),
@@ -131,6 +136,31 @@ router.post('/chat', authMiddleware, async (req: Request, res: Response) => {
 });
 
 router.get('/findings', authMiddleware, async (req: Request, res: Response) => {
+  const parsed = findingsQuerySchema.safeParse(req.query);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid FleetGraph findings context' });
+    return;
+  }
+
+  const contextIds = [
+    parsed.data.documentId,
+    parsed.data.projectId,
+  ].filter((id, index, ids): id is string => Boolean(id) && ids.indexOf(id) === index);
+  const contextFilter = contextIds.length
+    ? `AND (
+         d.properties->>'target_document_id' = ANY($3::text[])
+         OR EXISTS (
+           SELECT 1
+           FROM document_associations da
+           WHERE da.document_id = d.id
+             AND da.related_id = ANY($3::uuid[])
+         )
+       )`
+    : '';
+  const params = contextIds.length
+    ? [req.workspaceId, req.userId, contextIds]
+    : [req.workspaceId, req.userId];
+
   const result = await pool.query(
     `SELECT fd.id as delivery_id,
             fd.status as delivery_status,
@@ -148,9 +178,10 @@ router.get('/findings', authMiddleware, async (req: Request, res: Response) => {
      WHERE fd.workspace_id = $1
        AND fd.user_id = $2
        AND d.document_type = 'fleetgraph_finding'
+       ${contextFilter}
      ORDER BY fd.delivered_at DESC
      LIMIT 50`,
-    [req.workspaceId, req.userId],
+    params,
   );
 
   res.json({

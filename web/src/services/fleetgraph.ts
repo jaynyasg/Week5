@@ -7,6 +7,7 @@ import type {
   FleetGraphFindingsResponse,
   FleetGraphRunSummary,
   FleetGraphStatusResponse,
+  AssistantRouteContext,
 } from '@ship/shared';
 import { apiGet, apiPatch, apiPost } from '@/lib/api';
 
@@ -31,8 +32,15 @@ export async function sendFleetGraphMessage(
   return data;
 }
 
-export async function getFleetGraphFindings(): Promise<FleetGraphFindingsResponse> {
-  const response = await apiGet('/api/fleetgraph/findings');
+export async function getFleetGraphFindings(
+  context?: Pick<AssistantRouteContext, 'documentId' | 'projectId'>,
+): Promise<FleetGraphFindingsResponse> {
+  const params = new URLSearchParams();
+  if (context?.documentId) params.set('documentId', context.documentId);
+  if (context?.projectId) params.set('projectId', context.projectId);
+
+  const query = params.toString();
+  const response = await apiGet(`/api/fleetgraph/findings${query ? `?${query}` : ''}`);
   if (!response.ok) {
     throw new Error('Failed to load FleetGraph findings');
   }

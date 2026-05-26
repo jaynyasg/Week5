@@ -223,7 +223,8 @@ New deterministic coverage:
 - `e2e/fixtures/isolated-env.ts` owns FleetGraph setup data for a completed proactive run, delivered finding, unread delivery, and pending action proposal.
 - `e2e/fleetgraph.spec.ts` now exercises the FleetGraph drawer, delivered finding detail, delivery read-state transition, action proposal rejection, and context-aware chat response.
 - `e2e/fleetgraph.spec.ts` creates a real sprint document event, drains FleetGraph against the isolated test database, and asserts delivery, drawer visibility, and nonzero run token metadata under the 5 minute latency target.
-- `api/src/routes/fleetgraph.test.ts` now covers FleetGraph auth, CSRF, per-user delivery visibility, admin access, action-decision authorization, and action-decision audit logging with run/trace metadata.
+- `api/src/routes/fleetgraph.test.ts` now covers FleetGraph auth, CSRF, per-user delivery visibility, document/project route-context finding filters, invalid filter rejection, admin access, action-decision authorization, and action-decision audit logging with run/trace metadata.
+- `web/src/hooks/useFleetGraph.test.tsx` now verifies current route context is passed into FleetGraph findings fetches as well as chat requests.
 - `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx` covers FleetGraph drawer loading, empty, error, unavailable, missing evidence, snooze/dismiss, rejected decision, action-error, and trace-present/missing states.
 - `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx` also covers component-level accessibility semantics for status regions, alert regions, and finding row accessible labels.
 - `web/src/components/assistant/AskShipPanel.test.tsx`, `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx`, and `web/src/components/ui/Toast.test.tsx` cover the mobile drawer width contract, 44px FleetGraph mobile action targets, and mobile toast offset above the pinned composer.
@@ -231,4 +232,4 @@ New deterministic coverage:
 
 Blocked locally:
 
-- `pnpm --filter @ship/api test:fleetgraph-api` is available for DB-backed FleetGraph route/schema validation, but the latest local attempt failed in shared setup with `ECONNREFUSED` on `localhost:5432` before FleetGraph assertions ran.
+- `pnpm --filter @ship/api test:fleetgraph-api` is available for DB-backed FleetGraph route/schema validation, but the latest local attempts failed in shared setup with `ECONNREFUSED` on `localhost:5432` before FleetGraph assertions ran. The same local PostgreSQL blocker currently affects focused DB-backed OpenAPI runs.

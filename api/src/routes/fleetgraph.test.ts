@@ -18,7 +18,10 @@ describe('FleetGraph API', () => {
   let otherUserId: string;
   let adminUserId: string;
   let documentId: string;
+  let projectId: string;
+  let unrelatedDocumentId: string;
   let findingDocumentId: string;
+  let unrelatedFindingDocumentId: string;
   let deliveryId: string;
   let proposalId: string;
   let runId: string;
@@ -86,6 +89,36 @@ describe('FleetGraph API', () => {
     );
     documentId = documentResult.rows[0].id;
 
+    const projectResult = await pool.query(
+      `INSERT INTO documents (workspace_id, document_type, title, content, properties, created_by)
+       VALUES ($1, 'project', 'FleetGraph Project', $2, '{}', $3)
+       RETURNING id`,
+      [
+        workspaceId,
+        JSON.stringify({
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'FleetGraph project context.' }] }],
+        }),
+        userId,
+      ],
+    );
+    projectId = projectResult.rows[0].id;
+
+    const unrelatedDocumentResult = await pool.query(
+      `INSERT INTO documents (workspace_id, document_type, title, content, properties, created_by)
+       VALUES ($1, 'wiki', 'Unrelated FleetGraph Brief', $2, '{}', $3)
+       RETURNING id`,
+      [
+        workspaceId,
+        JSON.stringify({
+          type: 'doc',
+          content: [{ type: 'paragraph', content: [{ type: 'text', text: 'Unrelated FleetGraph context.' }] }],
+        }),
+        userId,
+      ],
+    );
+    unrelatedDocumentId = unrelatedDocumentResult.rows[0].id;
+
     const runResult = await pool.query(
       `INSERT INTO fleetgraph_runs (
          workspace_id, user_id, mode, trigger_type, trigger_id, thread_id, status, provider, model, metadata, completed_at
@@ -103,6 +136,26 @@ describe('FleetGraph API', () => {
       [workspaceId, JSON.stringify(findingProperties(runId, documentId, userId)), userId],
     );
     findingDocumentId = findingResult.rows[0].id;
+
+    await pool.query(
+      `INSERT INTO document_associations (document_id, related_id, relationship_type)
+       VALUES ($1, $2, 'project')`,
+      [findingDocumentId, projectId],
+    );
+
+    const unrelatedFindingResult = await pool.query(
+      `INSERT INTO documents (workspace_id, document_type, title, properties, created_by, visibility)
+       VALUES ($1, 'fleetgraph_finding', 'Unrelated FleetGraph Finding', $2, $3, 'workspace')
+       RETURNING id`,
+      [workspaceId, JSON.stringify(findingProperties(runId, unrelatedDocumentId, userId)), userId],
+    );
+    unrelatedFindingDocumentId = unrelatedFindingResult.rows[0].id;
+
+    await pool.query(
+      `INSERT INTO fleetgraph_deliveries (workspace_id, finding_document_id, user_id)
+       VALUES ($1, $2, $3)`,
+      [workspaceId, unrelatedFindingDocumentId, userId],
+    );
 
     const deliveryResult = await pool.query(
       `INSERT INTO fleetgraph_deliveries (workspace_id, finding_document_id, user_id)
@@ -228,6 +281,35 @@ describe('FleetGraph API', () => {
         status: 'unread',
       }),
     ]));
+  });
+
+  it('GET /api/fleetgraph/findings filters to current document context', async () => {
+    const res = await request(app)
+      .get(`/api/fleetgraph/findings?documentId=${documentId}`)
+      .set('Cookie', sessionCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.findings.map((finding: { id: string }) => finding.id)).toContain(findingDocumentId);
+    expect(res.body.findings.map((finding: { id: string }) => finding.id)).not.toContain(unrelatedFindingDocumentId);
+  });
+
+  it('GET /api/fleetgraph/findings filters to current project context', async () => {
+    const res = await request(app)
+      .get(`/api/fleetgraph/findings?projectId=${projectId}`)
+      .set('Cookie', sessionCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.findings.map((finding: { id: string }) => finding.id)).toContain(findingDocumentId);
+    expect(res.body.findings.map((finding: { id: string }) => finding.id)).not.toContain(unrelatedFindingDocumentId);
+  });
+
+  it('GET /api/fleetgraph/findings rejects invalid route context filters', async () => {
+    const res = await request(app)
+      .get('/api/fleetgraph/findings?documentId=not-a-uuid')
+      .set('Cookie', sessionCookie);
+
+    expect(res.status).toBe(400);
+    expect(res.body.error).toBe('Invalid FleetGraph findings context');
   });
 
   it('GET /api/fleetgraph/findings/:id denies members without delivery state', async () => {

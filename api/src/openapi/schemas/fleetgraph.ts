@@ -84,6 +84,11 @@ const FleetGraphChatRequestSchema = z.object({
   findingId: z.string().uuid().optional(),
 }).openapi('FleetGraphChatRequest');
 
+const FleetGraphFindingsQuerySchema = z.object({
+  documentId: z.string().uuid().optional(),
+  projectId: z.string().uuid().optional(),
+}).openapi('FleetGraphFindingsQuery');
+
 const FleetGraphEvidenceSchema = z.object({
   sourceType: FleetGraphSourceTypeSchema,
   sourceId: z.string(),
@@ -227,6 +232,7 @@ const FleetGraphActionDecisionResponseSchema = z.object({
 
 registry.register('FleetGraphStatus', FleetGraphStatusSchema);
 registry.register('FleetGraphChatRequest', FleetGraphChatRequestSchema);
+registry.register('FleetGraphFindingsQuery', FleetGraphFindingsQuerySchema);
 registry.register('FleetGraphChatResponse', FleetGraphChatResponseSchema);
 registry.register('FleetGraphFindingsResponse', FleetGraphFindingsResponseSchema);
 registry.register('FleetGraphFindingDetail', FleetGraphFindingDetailSchema);
@@ -284,7 +290,10 @@ registry.registerPath({
   path: '/fleetgraph/findings',
   tags: ['FleetGraph'],
   summary: 'List delivered FleetGraph findings',
-  description: 'Returns FleetGraph findings delivered to the current user and their delivery state.',
+  description: 'Returns FleetGraph findings delivered to the current user and their delivery state. Optional route-context query parameters narrow results to a current document or project.',
+  request: {
+    query: FleetGraphFindingsQuerySchema,
+  },
   responses: {
     200: {
       description: 'Delivered findings',
