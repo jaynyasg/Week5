@@ -2,9 +2,8 @@
 node_modules
 **/node_modules
 
-# Build artifacts (but NOT api/dist and shared/dist which are needed)
-!api/dist
-!shared/dist
+# Build artifacts are generated inside Docker during Render deploys
+**/dist
 *.tsbuildinfo
 **/*.tsbuildinfo
 
