@@ -1,6 +1,6 @@
 # FleetGraph Cost and Tracing Plan
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 Generated via `$gsd-docs-update` from the PRD, `PRESEARCH.md`, and `FLEETGRAPH.md`.
 
@@ -120,13 +120,13 @@ Use current provider prices on the submission date. Do not hard-code stale price
 
 ## Current Starter Pricing Snapshot
 
-Checked on 2026-05-25 against [OpenAI GPT-4o mini model pricing](https://developers.openai.com/api/docs/models/gpt-4o-mini).
+Checked on 2026-05-26 against [OpenAI GPT-4o mini model pricing](https://platform.openai.com/docs/models/gpt-4o-mini).
 
 | Model | Input | Output | Notes |
 |---|---:|---:|---|
 | `gpt-4o-mini` | $0.15 / 1M tokens | $0.60 / 1M tokens | Starter low-cost model for demo estimates; recheck on submission day |
 
-Seeded local evidence uses 1,200 input tokens and 280 output tokens, which evaluates to $0.000348 with this pricing.
+Seeded local evidence uses 1,200 input tokens and 280 output tokens, which evaluates to $0.000348 with this pricing. A second isolated Docker Postgres validation row captured 787 input tokens and 149 output tokens, which evaluates to $0.000207 at the same price.
 
 Implementation status:
 
@@ -157,12 +157,15 @@ Derived starter costs:
 
 ## Development Spend Log
 
-Add a table to final `FLEETGRAPH.md`:
+Add a table to final `FLEETGRAPH.md`.
 
 | Date | Run type | Count | Input tokens | Output tokens | Cost | Notes |
 |---|---:|---:|---:|---:|---:|---|
-| TBD | proactive | TBD | TBD | TBD | TBD | TBD |
-| TBD | on-demand | TBD | TBD | TBD | TBD | TBD |
+| 2026-05-26 | proactive seed | 1 | 1,200 | 280 | $0.000348 | Actual E2E seed `fleetgraph_runs` row using mock provider; stored estimate matches current `gpt-4o-mini` pricing |
+| 2026-05-26 | on-demand chat validation | 1 | 787 | 149 | $0.000207 | Actual isolated Docker Postgres `fleetgraph_runs` row using mock provider; cost recomputed as `gpt-4o-mini` equivalent |
+| 2026-05-26 | on-demand chat validation | 1 | 0 | 0 | $0.000000 | Actual isolated Docker Postgres `fleetgraph_runs` row with no provider usage captured |
+
+Actual billable spend remains pending until FleetGraph is run with model provider credentials. On 2026-05-26 the local process did not include `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, or `LANGSMITH_PROJECT`.
 
 ## Production Projection Table
 

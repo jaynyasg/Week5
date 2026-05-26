@@ -1,6 +1,6 @@
 # FleetGraph Validation Plan
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 Generated via `$gsd-docs-update` from the PRD, `FLEETGRAPH.md`, and Ship test patterns.
 
@@ -194,17 +194,17 @@ pnpm build
 
 | Evidence | Source | Status |
 |---|---|---|
-| Proactive detection | E2E/timed run | Timed local E2E event-to-finding passed; deployed/model-backed run pending |
+| Proactive detection | E2E/timed run | Timed local E2E event-to-finding passed on 2026-05-26; deployed/model-backed run pending |
 | On-demand chat | UI/E2E run | Deterministic E2E passed |
-| HITL gate | API + UI test | Deterministic E2E reject flow passed; DB-backed API authorization and audit coverage added, local run blocked by PostgreSQL |
-| Trace link 1 | LangSmith | TBD |
-| Trace link 2 | LangSmith | TBD |
-| Cost per run | `fleetgraph_runs` + provider metadata | Starter projection documented; real run table pending |
-| Public deployment | Render URL | TBD |
+| HITL gate | API + UI test | Deterministic E2E reject flow passed; DB-backed API authorization and audit tests passed on 2026-05-26 |
+| Trace link 1 | LangSmith | Blocked locally: no `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, or `LANGSMITH_PROJECT` |
+| Trace link 2 | LangSmith | Blocked locally: no `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, or `LANGSMITH_PROJECT` |
+| Cost per run | `fleetgraph_runs` + provider metadata | Mock-provider run rows captured and priced with current `gpt-4o-mini`; billable model-backed rows pending |
+| Public deployment | Render URL | Blocked locally: no `RENDER_API_KEY` or known FleetGraph deployment URL |
 
 ## Implementation Validation Snapshot
 
-Last implementation pass: 2026-05-25.
+Last implementation pass: 2026-05-26.
 
 Completed locally:
 
@@ -214,6 +214,8 @@ Completed locally:
 - `pnpm --filter @ship/web exec vitest run src/hooks/useFleetGraph.test.tsx src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx`
 - `pnpm --filter @ship/web exec vitest run src/components/assistant/AskShipPanel.test.tsx src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx src/components/ui/Toast.test.tsx`
 - `pnpm --filter @ship/api test:fleetgraph-eval`
+- `pnpm --filter @ship/api test:fleetgraph-api`
+- `pnpm --filter @ship/api exec vitest run src/openapi/fleetgraph.test.ts src/routes/fleetgraph.test.ts`
 - `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1`
 - `git diff --check`
 - pre-commit empty-test check
@@ -231,7 +233,12 @@ New deterministic coverage:
 - `web/src/components/assistant/AskShipPanel.test.tsx`, `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx`, and `web/src/components/ui/Toast.test.tsx` cover the mobile drawer width contract, 44px FleetGraph mobile action targets, and mobile toast offset above the pinned composer.
 - `api/src/scripts/fleetgraph-drain.test.ts` covers the scheduled drain command defaults and Render sweep env parsing for missed/stale proactive coverage.
 - `pnpm --filter @ship/api test:fleetgraph-eval` now runs the focused no-database FleetGraph suite for costs, deterministic eval paths, LangGraph MemorySaver interrupt/resume coverage, and run usage estimation.
+- `pnpm --filter @ship/api test:fleetgraph-api` passed 22 DB-backed tests against isolated Docker Postgres on 2026-05-26.
+- `pnpm --filter @ship/api exec vitest run src/openapi/fleetgraph.test.ts src/routes/fleetgraph.test.ts` passed 17 focused OpenAPI/route tests against isolated Docker Postgres on 2026-05-26.
+- `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1` passed 2/2 on 2026-05-26, including the timed event-to-finding flow.
 
-Blocked locally:
+External blockers:
 
-- `pnpm --filter @ship/api test:fleetgraph-api` is available for DB-backed FleetGraph route/schema validation, but the latest local attempts failed in shared setup with `ECONNREFUSED` on `localhost:5432` before FleetGraph assertions ran. The same local PostgreSQL blocker currently affects focused DB-backed OpenAPI runs.
+- Model-backed LangSmith traces cannot be generated in this environment until `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, and `LANGSMITH_PROJECT` are provided.
+- Public Render verification cannot be completed in this environment until `RENDER_API_KEY` or a known deployed FleetGraph URL is provided.
+- Billable cost rows should be regenerated from deployed or locally configured model-backed `fleetgraph_runs` rows after provider credentials are present.

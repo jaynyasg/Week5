@@ -1,6 +1,6 @@
 # FleetGraph Design
 
-Last reviewed: 2026-05-25
+Last reviewed: 2026-05-26
 
 FleetGraph is Ship's project intelligence agent. It reads real Ship project state, reasons over program, project, week, issue, and accountability signals, and surfaces timely findings inside the existing Ship experience.
 
@@ -429,12 +429,12 @@ flowchart TD
 
 | # | Role | Trigger | Detection or Output | Human Approval | Trace |
 |---|---|---|---|---|---|
-| 1 | PM | Week starts without an approved plan | Finding on the week, notify week owner and approver | Required only if FleetGraph proposes creating/changing plan content | TBD |
-| 2 | Director | Project has repeated scope churn or stalled issues | Project risk finding with evidence from issues and timeline | Required before changing project status or assignments | TBD |
-| 3 | Engineer | Assigned issue is stale or blocked | Finding explaining blocker, likely next step, and owner | Required before changing issue status/assignee | TBD |
-| 4 | PM | Approved plan changes after approval | Finding that re-review is needed with changed document link | Required for any approval/unapproval action | TBD |
-| 5 | Director | Program has projects with missing accountable/owner data | Finding listing affected projects and suggested owners to confirm | Required before changing RACI fields | TBD |
-| 6 | User | Opens FleetGraph from a project or week | Context-aware chat answer grounded in current view | Required before executing any mutation proposed in chat | TBD |
+| 1 | PM | Week starts without an approved plan | Finding on the week, notify week owner and approver | Required only if FleetGraph proposes creating/changing plan content | LangSmith TBD; deterministic DB/E2E evidence passed 2026-05-26 |
+| 2 | Director | Project has repeated scope churn or stalled issues | Project risk finding with evidence from issues and timeline | Required before changing project status or assignments | LangSmith TBD; deterministic eval evidence passed 2026-05-25 |
+| 3 | Engineer | Assigned issue is stale or blocked | Finding explaining blocker, likely next step, and owner | Required before changing issue status/assignee | LangSmith TBD; deterministic eval evidence passed 2026-05-25 |
+| 4 | PM | Approved plan changes after approval | Finding that re-review is needed with changed document link | Required for any approval/unapproval action | LangSmith TBD; HITL API/UI evidence passed 2026-05-26 |
+| 5 | Director | Program has projects with missing accountable/owner data | Finding listing affected projects and suggested owners to confirm | Required before changing RACI fields | LangSmith TBD; deterministic eval evidence passed 2026-05-25 |
+| 6 | User | Opens FleetGraph from a project or week | Context-aware chat answer grounded in current view | Required before executing any mutation proposed in chat | LangSmith TBD; deterministic chat/E2E evidence passed 2026-05-26 |
 
 ## Human-in-the-Loop Experience
 
@@ -482,12 +482,22 @@ Cost assumptions to fill before final submission:
 - Current provider price for chosen model on submission day.
 - Monthly projections at 100, 1,000, and 10,000 users.
 
-Starter cost baseline checked on 2026-05-25:
+Starter cost baseline checked on 2026-05-26:
 
 - Model: `gpt-4o-mini` for low-cost FleetGraph demo runs.
-- Price source: [OpenAI GPT-4o mini model pricing](https://developers.openai.com/api/docs/models/gpt-4o-mini).
+- Price source: [OpenAI GPT-4o mini model pricing](https://platform.openai.com/docs/models/gpt-4o-mini).
 - Standard text price used for estimates: $0.15 / 1M input tokens and $0.60 / 1M output tokens.
 - E2E seed run example: 1,200 input tokens + 280 output tokens = $0.000348.
+
+Measured validation run rows:
+
+| Date | Source | Mode | Provider/model | Input tokens | Output tokens | Cost basis | Cost |
+|---|---|---|---|---:|---:|---|---:|
+| 2026-05-26 | E2E seed `fleetgraph_runs` row | proactive | `mock` / `mock-fleetgraph` | 1,200 | 280 | Stored seed estimate at current `gpt-4o-mini` text pricing | $0.000348 |
+| 2026-05-26 | Isolated Docker Postgres `fleetgraph_runs` row | chat | `mock` / `mock-fleetgraph` | 787 | 149 | Recomputed `gpt-4o-mini` equivalent from actual run tokens | $0.000207 |
+| 2026-05-26 | Isolated Docker Postgres `fleetgraph_runs` row | chat | `mock` / `mock-fleetgraph` | 0 | 0 | No provider usage captured for this validation row | $0.000000 |
+
+These rows prove run usage capture and cost math paths. Actual billable spend and shared LangSmith trace URLs still require model-backed runs with `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, and `LANGSMITH_PROJECT` configured.
 
 Starter projection to replace with real `fleetgraph_runs` measurements:
 
@@ -516,13 +526,15 @@ Required implementation tests:
 
 ### Current Implementation Validation
 
-Last checked: 2026-05-25.
+Last checked: 2026-05-26.
 
 Passing local checks:
 
 - `pnpm type-check`
 - `pnpm build:api`
 - `pnpm build:web`
+- `pnpm --filter @ship/api test:fleetgraph-api`
+- `pnpm --filter @ship/api exec vitest run src/openapi/fleetgraph.test.ts src/routes/fleetgraph.test.ts`
 - `pnpm --filter @ship/api test:fleetgraph-eval`
 - `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1`
 - focused FleetGraph web hook, drawer, responsive panel, toast, and route-context tests
@@ -542,17 +554,14 @@ Current deterministic evidence:
 - `api/src/services/fleetgraph/graph.test.ts`, included in `pnpm --filter @ship/api test:fleetgraph-eval`, verifies the compiled LangGraph workflow can checkpoint an approval interrupt with `MemorySaver` and resume with a human decision.
 - `api/src/scripts/fleetgraph-drain.test.ts`, included in `pnpm --filter @ship/api test:fleetgraph-eval`, verifies the scheduled drain command keeps local drain-only defaults and parses Render sweep settings for proactive backstop coverage.
 - `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus the no-finding branch: week planning gap, project churn/stalled issues, stale engineer issue, approved-plan-change HITL, missing ownership, context chat, and no-finding.
+- DB-backed validation completed against isolated Docker Postgres on 2026-05-26: `pnpm --filter @ship/api test:fleetgraph-api` passed 22 tests, and the focused FleetGraph OpenAPI/route run passed 17 tests.
+- FleetGraph E2E completed on 2026-05-26 with `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1`: 2 passed, including the timed event-to-finding path under the 5 minute requirement.
 
-Blocked until local PostgreSQL is running:
+External evidence still blocked in this environment:
 
-- `pnpm --filter @ship/api test:fleetgraph-api` and focused DB-backed API/OpenAPI runs currently fail in shared setup with `ECONNREFUSED` on `localhost:5432` before FleetGraph assertions run.
-
-Pending final submission evidence:
-
-- deployed or model-backed timed event-to-finding run under 5 minutes
-- at least two reviewed LangSmith trace links
-- cost table from deployed or model-backed `fleetgraph_runs` data
-- deployed URL validation
+- Model-backed LangSmith traces need `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, and `LANGSMITH_PROJECT`; none were present in the local process on 2026-05-26.
+- Public deployment verification needs Render credentials or a known deployed URL; no `RENDER_API_KEY` or FleetGraph public URL was present in the local process on 2026-05-26.
+- Actual billable cost rows should be regenerated from deployed or locally configured model-backed `fleetgraph_runs` rows once the provider and tracing credentials are available.
 
 ## Implementation Tasks
 

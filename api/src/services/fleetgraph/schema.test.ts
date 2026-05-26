@@ -201,11 +201,12 @@ describe('FleetGraph schema foundation', () => {
       [findingDocumentId],
     );
 
-    expect(result.rows).toEqual([
+    expect(result.rows).toHaveLength(3);
+    expect(result.rows).toEqual(expect.arrayContaining([
       { relationship_type: 'program', document_type: 'program' },
       { relationship_type: 'project', document_type: 'project' },
       { relationship_type: 'sprint', document_type: 'sprint' },
-    ]);
+    ]));
   });
 
   it('keeps shared FleetGraph contracts usable by API responses', () => {

@@ -1,6 +1,6 @@
 # FleetGraph Use Cases and Trace Plan
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 Generated via `$gsd-docs-update` from `FLEETGRAPH.md`, `PRESEARCH.md`, and the PRD extract.
 
@@ -41,7 +41,7 @@ Trace target:
 
 Trace link:
 
-- TBD
+- TBD - LangSmith credentials/deploy pending.
 
 ## Use Case 2: Project Has Scope Churn or Stalled Issues
 
@@ -74,7 +74,7 @@ Trace target:
 
 Trace link:
 
-- TBD
+- TBD - LangSmith credentials/deploy pending.
 
 ## Use Case 3: Engineer Has a Stale or Blocked Issue
 
@@ -106,7 +106,7 @@ Trace target:
 
 Trace link:
 
-- TBD
+- TBD - LangSmith credentials/deploy pending.
 
 ## Use Case 4: Approved Plan Changes After Approval
 
@@ -137,7 +137,7 @@ Trace target:
 
 Trace link:
 
-- TBD
+- TBD - LangSmith credentials/deploy pending.
 
 ## Use Case 5: Missing Owner or Accountable Role
 
@@ -168,7 +168,7 @@ Trace target:
 
 Trace link:
 
-- TBD
+- TBD - LangSmith credentials/deploy pending.
 
 ## Use Case 6: Context-Aware Project Chat
 
@@ -199,24 +199,27 @@ Trace target:
 
 Trace link:
 
-- TBD
+- TBD - LangSmith credentials/deploy pending.
 
 ## Trace Matrix
 
 | Use Case | Required For MVP? | Expected Path | Trace Link | Status |
 |---|---:|---|---|---|
-| Week starts without approved plan | Yes | Proactive finding or HITL | TBD | Deterministic eval covers proactive `planning_gap`; LangSmith trace pending |
-| Project churn/stalled issues | Yes | Proactive finding | TBD | Deterministic eval covers `dependency_risk` with stale issue evidence; LangSmith trace pending |
-| Stale/blocked engineer issue | Yes | Proactive or on-demand | TBD | Deterministic eval covers `stale_commitment`; LangSmith trace pending |
-| Approved plan changes | Yes | HITL proposal | TBD | Deterministic E2E seed and eval cover HITL `scope_drift`; LangSmith trace pending |
-| Missing owner/accountable | Yes | Finding or HITL proposal | TBD | Deterministic eval covers missing ownership `planning_gap`; LangSmith trace pending |
-| Context-aware project chat | Yes | On-demand chat | TBD | Deterministic E2E and eval cover grounded chat; LangSmith trace pending |
+| Week starts without approved plan | Yes | Proactive finding or HITL | TBD - LangSmith credentials/deploy pending | Deterministic eval plus DB-backed timed E2E cover proactive `planning_gap`; local run passed 2026-05-26 |
+| Project churn/stalled issues | Yes | Proactive finding | TBD - LangSmith credentials/deploy pending | Deterministic eval covers `dependency_risk` with stale issue evidence |
+| Stale/blocked engineer issue | Yes | Proactive or on-demand | TBD - LangSmith credentials/deploy pending | Deterministic eval covers `stale_commitment` |
+| Approved plan changes | Yes | HITL proposal | TBD - LangSmith credentials/deploy pending | Deterministic E2E seed, DB-backed route tests, and eval cover HITL `scope_drift` |
+| Missing owner/accountable | Yes | Finding or HITL proposal | TBD - LangSmith credentials/deploy pending | Deterministic eval covers missing ownership `planning_gap` |
+| Context-aware project chat | Yes | On-demand chat | TBD - LangSmith credentials/deploy pending | Deterministic E2E and eval cover grounded chat; DB-backed chat run metadata captured locally |
 
-Deterministic local evidence added on 2026-05-25:
+Deterministic local evidence added on 2026-05-25 and extended on 2026-05-26:
 
 - `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus no-finding: proactive planning gap, project churn, stale issue, HITL approved-plan change, missing ownership, and context chat.
 - `e2e/fleetgraph.spec.ts` verifies the delivered finding UI, read-state transition, action proposal rejection, and context-aware chat response against seeded Ship data.
-- Final submission still needs real LangSmith trace links from deployed or locally configured model-backed runs.
+- `pnpm --filter @ship/api test:fleetgraph-api` passed against isolated Docker Postgres on 2026-05-26, covering DB-backed FleetGraph schema, route, authorization, and audit behavior.
+- `pnpm --filter @ship/api exec vitest run src/openapi/fleetgraph.test.ts src/routes/fleetgraph.test.ts` passed on 2026-05-26, covering OpenAPI registration and focused route behavior.
+- `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1` passed 2/2 on 2026-05-26, including the timed event-to-finding flow under the 5 minute target.
+- Final submission still needs real LangSmith trace links from deployed or locally configured model-backed runs. The local process did not have `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, or `LANGSMITH_PROJECT` on 2026-05-26.
 
 Minimum final trace set:
 

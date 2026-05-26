@@ -1,6 +1,6 @@
 # FleetGraph Deployment and Ops Plan
 
-Last updated: 2026-05-25
+Last updated: 2026-05-26
 
 Generated via `$gsd-docs-update` from Week5 planning docs and Ship deployment references.
 
@@ -143,6 +143,14 @@ After deploy:
 - FleetGraph drawer opens in deployed UI.
 - LangSmith trace URL is stored for a real run.
 - Render logs show no migration or startup errors.
+
+Current local verification status on 2026-05-26:
+
+- `pnpm --filter @ship/api test:fleetgraph-api` passed against isolated Docker Postgres.
+- `pnpm --filter @ship/api exec vitest run src/openapi/fleetgraph.test.ts src/routes/fleetgraph.test.ts` passed against isolated Docker Postgres.
+- `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1` passed 2/2 and covered `/api/fleetgraph/status`, drawer access, action rejection, context chat, manual queue drain, and a timed event-to-finding path under 5 minutes.
+- Public Render verification is still pending because the local process did not include `RENDER_API_KEY` or a known deployed FleetGraph URL.
+- Model-backed LangSmith traces and billable cost rows are still pending because the local process did not include `OPENAI_API_KEY`, `LANGSMITH_API_KEY`, or `LANGSMITH_PROJECT`.
 
 ## Open Ops Questions
 
