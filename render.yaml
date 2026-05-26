@@ -100,6 +100,12 @@ services:
         value: "true"
       - key: SHIP_FLEETGRAPH_DRAIN_MAX_JOBS
         value: "10"
+      - key: SHIP_FLEETGRAPH_SWEEP_ON_DRAIN
+        value: "true"
+      - key: SHIP_FLEETGRAPH_SWEEP_MAX_WORKSPACES
+        value: "25"
+      - key: SHIP_FLEETGRAPH_MAX_EVENTS_PER_SWEEP
+        value: "25"
       - key: SHIP_FLEETGRAPH_TRACING_ENABLED
         value: "true"
       - key: LANGSMITH_PROJECT

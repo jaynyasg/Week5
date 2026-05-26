@@ -9,6 +9,7 @@ export default defineConfig({
       'src/services/fleetgraph/eval-harness.test.ts',
       'src/services/fleetgraph/graph.test.ts',
       'src/services/fleetgraph/runner-usage.test.ts',
+      'src/scripts/fleetgraph-drain.test.ts',
     ],
   },
 });

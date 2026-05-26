@@ -107,7 +107,7 @@ FleetGraph uses a hybrid trigger model:
 
 - Ship mutation paths enqueue durable evaluation jobs.
 - A scheduled worker or cron drains the queue every 1-2 minutes.
-- A scheduled sweep catches missed events, imports, restarts, and stale project state.
+- The drain command can enqueue a bounded scheduled sweep before claiming jobs, catching missed events, imports, restarts, and stale project state.
 - Database locks prevent duplicate work across overlapping workers.
 - Idempotency keys prevent duplicate findings for the same condition and state window.
 
@@ -540,6 +540,7 @@ Current deterministic evidence:
 - `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx` also verifies announced status/alert regions and accessible finding row labels for unread severity state.
 - `web/src/components/assistant/AskShipPanel.test.tsx`, `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx`, and `web/src/components/ui/Toast.test.tsx` verify the FleetGraph drawer's mobile full-width class contract, 44px mobile action targets, and mobile toast offset above the pinned composer.
 - `api/src/services/fleetgraph/graph.test.ts`, included in `pnpm --filter @ship/api test:fleetgraph-eval`, verifies the compiled LangGraph workflow can checkpoint an approval interrupt with `MemorySaver` and resume with a human decision.
+- `api/src/scripts/fleetgraph-drain.test.ts`, included in `pnpm --filter @ship/api test:fleetgraph-eval`, verifies the scheduled drain command keeps local drain-only defaults and parses Render sweep settings for proactive backstop coverage.
 - `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus the no-finding branch: week planning gap, project churn/stalled issues, stale engineer issue, approved-plan-change HITL, missing ownership, context chat, and no-finding.
 
 Blocked until local PostgreSQL is running:

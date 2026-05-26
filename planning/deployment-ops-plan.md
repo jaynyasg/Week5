@@ -82,6 +82,8 @@ Add a Render cron job:
 - build command: same API-capable build path as existing cron
 - start command: `node api/dist/scripts/fleetgraph-drain.js`
 - schedule: every 2 minutes for the demo branch, with the in-service sweep fallback retained for missed runs
+- `SHIP_FLEETGRAPH_SWEEP_ON_DRAIN=true` so each cron run can enqueue bounded sweep events before claiming queued jobs
+- `SHIP_FLEETGRAPH_SWEEP_MAX_WORKSPACES=25` and `SHIP_FLEETGRAPH_MAX_EVENTS_PER_SWEEP=25` to keep sweep work bounded
 
 Do not commit secrets into `render.yaml`.
 
