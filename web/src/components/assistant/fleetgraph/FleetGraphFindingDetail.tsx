@@ -30,11 +30,15 @@ export function FleetGraphFindingDetail({
   onDecision,
 }: FleetGraphFindingDetailProps) {
   if (loading) {
-    return <div className="px-4 py-3 text-sm text-muted">Loading finding...</div>;
+    return <div role="status" aria-live="polite" className="px-4 py-3 text-sm text-muted">Loading finding...</div>;
   }
 
   if (!finding) {
-    return <div className="px-4 py-3 text-sm text-muted">Select a FleetGraph finding.</div>;
+    return (
+      <div role="status" aria-live="polite" className="px-4 py-3 text-sm text-muted">
+        Select a FleetGraph finding.
+      </div>
+    );
   }
 
   return (

@@ -20,7 +20,13 @@ export function FleetGraphFindingsInbox({
 }: FleetGraphFindingsInboxProps) {
   if (loading) {
     return (
-      <div className="flex flex-col gap-2 px-4 py-3">
+      <div
+        role="status"
+        aria-label="Loading FleetGraph findings."
+        aria-live="polite"
+        aria-busy="true"
+        className="flex flex-col gap-2 px-4 py-3"
+      >
         {[0, 1, 2].map((index) => (
           <div key={index} className="h-[72px] rounded-md border border-border bg-card/70" />
         ))}
@@ -29,11 +35,15 @@ export function FleetGraphFindingsInbox({
   }
 
   if (error) {
-    return <div className="px-4 py-3 text-sm text-red-200">FleetGraph findings could not load.</div>;
+    return <div role="alert" className="px-4 py-3 text-sm text-red-200">FleetGraph findings could not load.</div>;
   }
 
   if (findings.length === 0) {
-    return <div className="px-4 py-3 text-sm text-muted">No FleetGraph findings.</div>;
+    return (
+      <div role="status" aria-live="polite" className="px-4 py-3 text-sm text-muted">
+        No FleetGraph findings.
+      </div>
+    );
   }
 
   return (
@@ -47,6 +57,7 @@ export function FleetGraphFindingsInbox({
             key={finding.id}
             type="button"
             onClick={() => onSelect(finding)}
+            aria-label={findingRowLabel(finding, delivery)}
             className={cn(
               'min-h-[72px] rounded-md border px-3 py-2 text-left transition-colors',
               selected ? 'border-accent bg-accent/10' : 'border-border bg-card hover:border-accent/60',
@@ -54,7 +65,10 @@ export function FleetGraphFindingsInbox({
             aria-pressed={selected}
           >
             <div className="flex items-center gap-2">
-              <span className={cn('h-2 w-2 rounded-full', unread ? severityDot(finding.severity) : 'bg-muted/40')} />
+              <span
+                aria-hidden="true"
+                className={cn('h-2 w-2 rounded-full', unread ? severityDot(finding.severity) : 'bg-muted/40')}
+              />
               <span className="truncate text-sm font-medium text-foreground">{finding.title}</span>
               <span className={cn('ml-auto rounded px-1.5 py-0.5 text-[11px] uppercase', severityTone(finding.severity))}>
                 {finding.severity}
@@ -78,4 +92,12 @@ function severityTone(severity: FleetGraphFindingSummary['severity']): string {
   if (severity === 'critical' || severity === 'high') return 'bg-red-500/15 text-red-200';
   if (severity === 'medium') return 'bg-yellow-500/15 text-yellow-100';
   return 'bg-accent/15 text-accent';
+}
+
+function findingRowLabel(
+  finding: FleetGraphFindingSummary,
+  delivery?: FleetGraphDelivery,
+): string {
+  const readState = delivery?.status ?? 'undelivered';
+  return `${readState} ${finding.severity} FleetGraph finding: ${finding.title}. ${finding.summary}`;
 }

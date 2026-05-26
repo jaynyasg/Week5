@@ -58,7 +58,7 @@ export function FleetGraphActionProposal({ proposal, deciding, error, onDecision
           </div>
         </>
       ) : null}
-      {error ? <p className="mt-2 text-xs text-red-200">Action update failed.</p> : null}
+      {error ? <p role="alert" className="mt-2 text-xs text-red-200">Action update failed.</p> : null}
     </section>
   );
 }

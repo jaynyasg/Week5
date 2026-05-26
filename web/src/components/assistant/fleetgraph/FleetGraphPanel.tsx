@@ -24,7 +24,10 @@ export function FleetGraphPanel({ context, onUnreadCountChange }: FleetGraphPane
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {unavailable ? (
-        <div className="m-4 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200">
+        <div
+          role="alert"
+          className="m-4 rounded-md border border-yellow-500/30 bg-yellow-500/10 px-3 py-2 text-sm text-yellow-200"
+        >
           FleetGraph is unavailable.
           {fleetGraph.status?.missingConfiguration.length ? (
             <span className="block text-xs text-yellow-100/80">
@@ -35,7 +38,10 @@ export function FleetGraphPanel({ context, onUnreadCountChange }: FleetGraphPane
       ) : null}
 
       {fleetGraph.sendError ? (
-        <div className="m-4 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200">
+        <div
+          role="alert"
+          className="m-4 rounded-md border border-red-500/30 bg-red-500/10 px-3 py-2 text-sm text-red-200"
+        >
           FleetGraph could not complete that request.
         </div>
       ) : null}

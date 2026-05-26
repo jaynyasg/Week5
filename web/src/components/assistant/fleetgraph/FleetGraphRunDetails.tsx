@@ -7,7 +7,11 @@ interface FleetGraphRunDetailsProps {
 
 export function FleetGraphRunDetails({ run, loading }: FleetGraphRunDetailsProps) {
   if (loading) {
-    return <div className="rounded-md border border-border bg-card px-3 py-2 text-xs text-muted">Loading run...</div>;
+    return (
+      <div role="status" aria-live="polite" className="rounded-md border border-border bg-card px-3 py-2 text-xs text-muted">
+        Loading run...
+      </div>
+    );
   }
 
   if (!run) return null;

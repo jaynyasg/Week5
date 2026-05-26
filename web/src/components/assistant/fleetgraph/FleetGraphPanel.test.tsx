@@ -37,10 +37,12 @@ describe('FleetGraphPanel', () => {
 
     render(<FleetGraphPanel onUnreadCountChange={onUnreadCountChange} />);
 
-    expect(screen.getByRole('button', { name: /Week plan needs approval/ })).toBeInTheDocument();
+    const row = screen.getByRole('button', { name: /Week plan needs approval/ });
+    expect(row).toBeInTheDocument();
+    expect(row).toHaveAccessibleName(/unread high FleetGraph finding/i);
     await waitFor(() => expect(onUnreadCountChange).toHaveBeenCalledWith(1));
 
-    fireEvent.click(screen.getByRole('button', { name: /Week plan needs approval/ }));
+    fireEvent.click(row);
     expect(selectFinding).toHaveBeenCalledWith(findingSummary);
   });
 
@@ -64,16 +66,23 @@ describe('FleetGraphPanel', () => {
   });
 
   it('renders empty, error, and unavailable inbox states', () => {
-    useFleetGraphMock.mockReturnValue(fleetGraphState());
+    useFleetGraphMock.mockReturnValue(fleetGraphState({
+      findingsLoading: true,
+    }));
     const { rerender } = render(<FleetGraphPanel />);
 
-    expect(screen.getByText('No FleetGraph findings.')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveAccessibleName('Loading FleetGraph findings.');
+
+    useFleetGraphMock.mockReturnValue(fleetGraphState());
+    rerender(<FleetGraphPanel />);
+
+    expect(screen.getByRole('status')).toHaveTextContent('No FleetGraph findings.');
 
     useFleetGraphMock.mockReturnValue(fleetGraphState({
       findingsError: new Error('network'),
     }));
     rerender(<FleetGraphPanel />);
-    expect(screen.getByText('FleetGraph findings could not load.')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('FleetGraph findings could not load.');
 
     useFleetGraphMock.mockReturnValue(fleetGraphState({
       status: {
@@ -83,10 +92,16 @@ describe('FleetGraphPanel', () => {
       },
     }));
     rerender(<FleetGraphPanel />);
-    expect(screen.getByText('FleetGraph is unavailable.')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('FleetGraph is unavailable.');
     expect(screen.getByText('Missing OPENAI_API_KEY')).toBeInTheDocument();
     expect(screen.getByLabelText('FleetGraph message')).toBeDisabled();
     expect(screen.getByRole('button', { name: 'Send FleetGraph message' })).toBeDisabled();
+
+    useFleetGraphMock.mockReturnValue(fleetGraphState({
+      sendError: new Error('failed'),
+    }));
+    rerender(<FleetGraphPanel />);
+    expect(screen.getByRole('alert')).toHaveTextContent('FleetGraph could not complete that request.');
   });
 
   it('renders selected finding loading and empty detail states', () => {
@@ -96,7 +111,7 @@ describe('FleetGraphPanel', () => {
     }));
     const { rerender } = render(<FleetGraphPanel />);
 
-    expect(screen.getByText('Loading finding...')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Loading finding...');
 
     useFleetGraphMock.mockReturnValue(fleetGraphState({
       selectedFindingId: findingSummary.id,
@@ -104,7 +119,7 @@ describe('FleetGraphPanel', () => {
       selectedFindingLoading: false,
     }));
     rerender(<FleetGraphPanel />);
-    expect(screen.getByText('Select a FleetGraph finding.')).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent('Select a FleetGraph finding.');
   });
 
   it('snoozes, dismisses, and labels missing trace details for a selected finding', () => {
@@ -146,7 +161,7 @@ describe('FleetGraphPanel', () => {
     render(<FleetGraphPanel />);
 
     expect(screen.getByText('No evidence attached.')).toBeInTheDocument();
-    expect(screen.getByText('Action update failed.')).toBeInTheDocument();
+    expect(screen.getByRole('alert')).toHaveTextContent('Action update failed.');
 
     fireEvent.change(screen.getByLabelText('FleetGraph action decision note'), {
       target: { value: 'Needs more context' },

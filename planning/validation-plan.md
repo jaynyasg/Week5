@@ -224,6 +224,7 @@ New deterministic coverage:
 - `e2e/fleetgraph.spec.ts` creates a real sprint document event, drains FleetGraph against the isolated test database, and asserts delivery, drawer visibility, and nonzero run token metadata under the 5 minute latency target.
 - `api/src/routes/fleetgraph.test.ts` now covers FleetGraph auth, CSRF, per-user delivery visibility, admin access, action-decision authorization, and action-decision audit logging with run/trace metadata.
 - `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx` covers FleetGraph drawer loading, empty, error, unavailable, missing evidence, snooze/dismiss, rejected decision, action-error, and trace-present/missing states.
+- `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx` also covers component-level accessibility semantics for status regions, alert regions, and finding row accessible labels.
 - `pnpm --filter @ship/api test:fleetgraph-eval` now runs the focused no-database FleetGraph suite for costs, deterministic eval paths, and run usage estimation.
 
 Blocked locally:
