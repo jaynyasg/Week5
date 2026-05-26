@@ -196,7 +196,7 @@ pnpm build
 |---|---|---|
 | Proactive detection | E2E/timed run | Timed local E2E event-to-finding passed; deployed/model-backed run pending |
 | On-demand chat | UI/E2E run | Deterministic E2E passed |
-| HITL gate | API + UI test | Deterministic E2E reject flow passed; DB-backed API authorization coverage pending |
+| HITL gate | API + UI test | Deterministic E2E reject flow passed; DB-backed API authorization and audit coverage added, local run blocked by PostgreSQL |
 | Trace link 1 | LangSmith | TBD |
 | Trace link 2 | LangSmith | TBD |
 | Cost per run | `fleetgraph_runs` + provider metadata | Starter projection documented; real run table pending |
@@ -222,8 +222,9 @@ New deterministic coverage:
 - `e2e/fixtures/isolated-env.ts` owns FleetGraph setup data for a completed proactive run, delivered finding, unread delivery, and pending action proposal.
 - `e2e/fleetgraph.spec.ts` now exercises the FleetGraph drawer, delivered finding detail, delivery read-state transition, action proposal rejection, and context-aware chat response.
 - `e2e/fleetgraph.spec.ts` creates a real sprint document event, drains FleetGraph against the isolated test database, and asserts delivery, drawer visibility, and nonzero run token metadata under the 5 minute latency target.
+- `api/src/routes/fleetgraph.test.ts` now covers FleetGraph auth, CSRF, per-user delivery visibility, admin access, action-decision authorization, and action-decision audit logging with run/trace metadata.
 - `pnpm --filter @ship/api test:fleetgraph-eval` now runs the focused no-database FleetGraph suite for costs, deterministic eval paths, and run usage estimation.
 
 Blocked locally:
 
-- Focused DB-backed API FleetGraph tests and migration/service tests require local PostgreSQL. The last standard API Vitest attempt failed during shared test setup with `ECONNREFUSED` on `localhost:5432`, before FleetGraph assertions ran.
+- `pnpm --filter @ship/api test:fleetgraph-api` is available for DB-backed FleetGraph route/schema validation, but the latest local attempt failed in shared setup with `ECONNREFUSED` on `localhost:5432` before FleetGraph assertions ran.

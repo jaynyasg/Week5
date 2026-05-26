@@ -13,6 +13,7 @@
     "type-check": "tsc --noEmit",
     "lint": "eslint .",
     "test": "vitest run",
+    "test:fleetgraph-api": "vitest run src/routes/fleetgraph.test.ts src/services/fleetgraph/schema.test.ts",
     "test:fleetgraph-eval": "vitest run --config vitest.fleetgraph-eval.config.ts",
     "test:security-probe": "vitest run --config vitest.security-probe.config.ts",
     "test:watch": "vitest",

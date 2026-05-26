@@ -14,6 +14,7 @@ import { authMiddleware } from '../middleware/auth.js';
 import { pool } from '../db/client.js';
 import { getFleetGraphStatus, FLEETGRAPH_LIMITS } from '../services/fleetgraph/config.js';
 import { runFleetGraph } from '../services/fleetgraph/runner.js';
+import { logAuditEvent } from '../services/audit.js';
 import type { FleetGraphEvidenceRef } from '../services/fleetgraph/types.js';
 
 type RouterType = ReturnType<typeof Router>;
@@ -274,27 +275,33 @@ router.post('/actions/:id/decision', authMiddleware, async (req: Request, res: R
     return;
   }
 
-  const result = await pool.query(
-    `UPDATE fleetgraph_action_proposals
-     SET status = $1,
-         decided_by_user_id = $2,
-         decided_at = now(),
-         decision_note = $3,
-         updated_at = now()
-     WHERE id = $4
-       AND workspace_id = $5
-       AND status = 'pending'
-       AND (
-         $6::boolean
-         OR EXISTS (
-           SELECT 1
-           FROM fleetgraph_deliveries fd
-           WHERE fd.workspace_id = fleetgraph_action_proposals.workspace_id
-             AND fd.finding_document_id = fleetgraph_action_proposals.finding_document_id
-             AND fd.user_id = $2
+  const result = await pool.query<ActionProposalRow>(
+    `WITH updated AS (
+       UPDATE fleetgraph_action_proposals
+       SET status = $1,
+           decided_by_user_id = $2,
+           decided_at = now(),
+           decision_note = $3,
+           updated_at = now()
+       WHERE id = $4
+         AND workspace_id = $5
+         AND status = 'pending'
+         AND (
+           $6::boolean
+           OR EXISTS (
+             SELECT 1
+             FROM fleetgraph_deliveries fd
+             WHERE fd.workspace_id = fleetgraph_action_proposals.workspace_id
+               AND fd.finding_document_id = fleetgraph_action_proposals.finding_document_id
+               AND fd.user_id = $2
+           )
          )
-       )
-     RETURNING *`,
+       RETURNING *
+     )
+     SELECT updated.*, fr.langsmith_trace_url
+     FROM updated
+     LEFT JOIN fleetgraph_runs fr ON fr.id = updated.run_id
+       AND fr.workspace_id = updated.workspace_id`,
     [parsed.data.status, req.userId, parsed.data.note ?? null, proposalId, req.workspaceId, isAdmin(req)],
   );
 
@@ -303,7 +310,25 @@ router.post('/actions/:id/decision', authMiddleware, async (req: Request, res: R
     return;
   }
 
-  res.json({ ok: true, proposal: actionProposalSummary(result.rows[0]) });
+  const proposal = result.rows[0]!;
+  await logAuditEvent({
+    workspaceId: req.workspaceId!,
+    actorUserId: req.userId!,
+    action: 'fleetgraph.action_decision',
+    resourceType: 'fleetgraph_action_proposal',
+    resourceId: proposal.id,
+    details: {
+      status: proposal.status,
+      proposedAction: proposal.proposed_action,
+      findingDocumentId: proposal.finding_document_id,
+      runId: proposal.run_id,
+      langsmithTraceUrl: proposal.langsmith_trace_url,
+      targetDocumentId: proposal.target_document_id,
+    },
+    req,
+  });
+
+  res.json({ ok: true, proposal: actionProposalSummary(proposal) });
 });
 
 async function getVisibleFinding(
@@ -476,6 +501,7 @@ interface ActionProposalRow {
   decided_at: Date | string | null;
   decision_note: string | null;
   error: string | null;
+  langsmith_trace_url?: string | null;
   created_at: Date | string;
   updated_at: Date | string;
 }

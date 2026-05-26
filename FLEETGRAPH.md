@@ -532,12 +532,12 @@ Current deterministic evidence:
 - `e2e/fixtures/isolated-env.ts` seeds a completed proactive FleetGraph run, a delivered unread finding, and a pending human action proposal.
 - `e2e/fleetgraph.spec.ts` opens FleetGraph from a Ship document, marks the delivered finding read, rejects the action proposal with a note, and verifies contextual chat response grounding.
 - `e2e/fleetgraph.spec.ts` also creates a real sprint document event, drains the FleetGraph queue against the isolated test database, verifies a delivered planning-gap finding appears in the drawer within the 5 minute latency target, and confirms the linked `fleetgraph_runs` row records token/cost metadata.
+- `api/src/routes/fleetgraph.test.ts` covers authentication, CSRF, per-user delivery visibility, admin run/finding access, action-decision authorization, and audit logging with run/trace metadata.
 - `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus the no-finding branch: week planning gap, project churn/stalled issues, stale engineer issue, approved-plan-change HITL, missing ownership, context chat, and no-finding.
 
 Blocked until local PostgreSQL is running:
 
-- focused FleetGraph API route tests
-- DB-backed migration/service verification
+- `pnpm --filter @ship/api test:fleetgraph-api` currently fails in shared setup with `ECONNREFUSED` on `localhost:5432` before FleetGraph assertions run.
 
 Pending final submission evidence:
 

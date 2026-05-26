@@ -311,6 +311,31 @@ describe('FleetGraph API', () => {
       decidedByUserId: userId,
       decisionNote: 'looks right',
     });
+
+    const audit = await pool.query(
+      `SELECT action, actor_user_id, resource_type, resource_id, details
+       FROM audit_logs
+       WHERE action = 'fleetgraph.action_decision'
+         AND resource_id = $1
+       ORDER BY created_at DESC
+       LIMIT 1`,
+      [proposalId],
+    );
+
+    expect(audit.rows[0]).toMatchObject({
+      action: 'fleetgraph.action_decision',
+      actor_user_id: userId,
+      resource_type: 'fleetgraph_action_proposal',
+      resource_id: proposalId,
+      details: expect.objectContaining({
+        status: 'approved',
+        proposedAction: 'request_update',
+        findingDocumentId,
+        runId,
+        langsmithTraceUrl: null,
+        targetDocumentId: documentId,
+      }),
+    });
   });
 
   it('OpenAPI JSON includes FleetGraph paths', async () => {
