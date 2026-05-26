@@ -1,13 +1,32 @@
-import { interrupt } from '@langchain/langgraph';
+import { Annotation, Command, END, interrupt, START, StateGraph } from '@langchain/langgraph';
 import { applyHumanDecision, collectActionProposalCandidates, createHumanApprovalInterrupt } from './actions.js';
 import { recordToEvidence } from './context.js';
 import { detectFleetGraphFindings } from './detectors.js';
+import type { FleetGraphRunnableConfig } from './tracing.js';
 import type {
+  FleetGraphActionProposalCandidate,
   FleetGraphContext,
+  FleetGraphFindingCandidate,
   FleetGraphHumanInterrupt,
   FleetGraphRunResult,
   FleetGraphState,
 } from './types.js';
+
+type FleetGraphDecision = NonNullable<FleetGraphState['decision']>;
+type FleetGraphAnswer = FleetGraphState['answer'];
+type FleetGraphGraphOutput = Partial<FleetGraphState> & {
+  __interrupt__?: Array<{ value?: FleetGraphHumanInterrupt }>;
+};
+
+const FleetGraphAnnotation = Annotation.Root({
+  context: Annotation<FleetGraphContext>(),
+  message: Annotation<string | undefined>(),
+  findings: Annotation<FleetGraphFindingCandidate[]>(),
+  proposals: Annotation<FleetGraphActionProposalCandidate[]>(),
+  answer: Annotation<FleetGraphAnswer | undefined>(),
+  interrupt: Annotation<FleetGraphHumanInterrupt | undefined>(),
+  decision: Annotation<FleetGraphDecision | undefined>(),
+});
 
 export function runFleetGraphState(input: {
   context: FleetGraphContext;
@@ -63,10 +82,130 @@ export function runFleetGraphState(input: {
   }
 }
 
+export async function runFleetGraphWorkflow(input: {
+  context: FleetGraphContext;
+  config: FleetGraphRunnableConfig;
+  checkpointer: unknown;
+  message?: string;
+  decision?: FleetGraphDecision;
+}): Promise<FleetGraphRunResult> {
+  try {
+    const graph = compileFleetGraphWorkflow(input.checkpointer);
+    const output = input.decision
+      ? await graph.invoke(new Command({ resume: input.decision }), input.config)
+      : await graph.invoke(initialGraphState(input), input.config);
+    const state = normalizeGraphState(output as FleetGraphGraphOutput, input);
+    const interruptPayload = readInterruptPayload(output as FleetGraphGraphOutput);
+
+    if (interruptPayload && !input.decision) {
+      state.interrupt = interruptPayload;
+      return {
+        status: 'interrupted',
+        state,
+      };
+    }
+
+    return {
+      status: 'completed',
+      state,
+    };
+  } catch (error) {
+    return {
+      status: 'failed',
+      error: error instanceof Error ? error.message : String(error),
+      state: {
+        context: input.context,
+        message: input.message,
+        findings: [],
+        proposals: [],
+      },
+    };
+  }
+}
+
 export function interruptForActionProposal(
   payload: FleetGraphHumanInterrupt,
 ): { status: 'approved' | 'rejected'; note?: string } {
   return interrupt(payload);
+}
+
+function compileFleetGraphWorkflow(checkpointer: unknown) {
+  return new StateGraph(FleetGraphAnnotation)
+    .addNode('detect', detectNode)
+    .addNode('approval_gate', approvalGateNode)
+    .addEdge(START, 'detect')
+    .addEdge('detect', 'approval_gate')
+    .addEdge('approval_gate', END)
+    .compile({ checkpointer: checkpointer as never });
+}
+
+function detectNode(state: typeof FleetGraphAnnotation.State): Partial<typeof FleetGraphAnnotation.State> {
+  const findings = detectFleetGraphFindings(state.context);
+  return {
+    findings,
+    proposals: collectActionProposalCandidates(findings),
+    answer: state.message ? answerFromContext(state.context, state.message) : undefined,
+  };
+}
+
+function approvalGateNode(state: typeof FleetGraphAnnotation.State): Partial<typeof FleetGraphAnnotation.State> {
+  if (state.decision && state.proposals[0]) {
+    return {
+      proposals: [applyHumanDecision(state.proposals[0], state.decision), ...state.proposals.slice(1)],
+      decision: state.decision,
+    };
+  }
+
+  const firstProposalFinding = state.findings.find((finding) => finding.actionProposal);
+  const interruptPayload = firstProposalFinding ? createHumanApprovalInterrupt(firstProposalFinding) : null;
+  if (!interruptPayload) return {};
+
+  const decision = interruptForActionProposal(interruptPayload);
+  return {
+    interrupt: interruptPayload,
+    decision,
+    proposals: [
+      applyHumanDecision(interruptPayload.proposal, decision),
+      ...state.proposals.filter((proposal) => proposal !== interruptPayload.proposal),
+    ],
+  };
+}
+
+function initialGraphState(input: {
+  context: FleetGraphContext;
+  message?: string;
+  decision?: FleetGraphDecision;
+}): FleetGraphState {
+  return {
+    context: input.context,
+    message: input.message,
+    findings: [],
+    proposals: [],
+    decision: input.decision,
+  };
+}
+
+function normalizeGraphState(
+  output: FleetGraphGraphOutput,
+  input: {
+    context: FleetGraphContext;
+    message?: string;
+    decision?: FleetGraphDecision;
+  },
+): FleetGraphState {
+  return {
+    context: output.context ?? input.context,
+    message: output.message ?? input.message,
+    findings: output.findings ?? [],
+    proposals: output.proposals ?? [],
+    answer: output.answer,
+    interrupt: output.interrupt,
+    decision: output.decision ?? input.decision,
+  };
+}
+
+function readInterruptPayload(output: FleetGraphGraphOutput): FleetGraphHumanInterrupt | undefined {
+  return output.__interrupt__?.find((item) => item.value)?.value;
 }
 
 function answerFromContext(context: FleetGraphContext, message: string): FleetGraphState['answer'] {

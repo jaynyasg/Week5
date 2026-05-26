@@ -7,6 +7,7 @@ export default defineConfig({
     include: [
       'src/services/fleetgraph/costs.test.ts',
       'src/services/fleetgraph/eval-harness.test.ts',
+      'src/services/fleetgraph/graph.test.ts',
       'src/services/fleetgraph/runner-usage.test.ts',
     ],
   },

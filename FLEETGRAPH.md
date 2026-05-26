@@ -324,6 +324,8 @@ Audit records must distinguish:
 - `approvedByUserId` for any human-approved action proposal.
 - `runId`, `threadId`, and `langsmithTraceUrl` for traceability.
 
+The runtime runner invokes FleetGraph through a compiled LangGraph `StateGraph` with the Postgres checkpointer and stable `thread_id` values. The deterministic state runner remains for local eval coverage, and the no-database FleetGraph eval suite uses LangGraph `MemorySaver` to verify interrupt/resume behavior without requiring local PostgreSQL.
+
 ## Data Model Sketch
 
 The exact migration names will depend on current Ship migration numbering.
@@ -537,6 +539,7 @@ Current deterministic evidence:
 - `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx` covers delivered findings, loading/empty/error/unavailable states, missing evidence, snooze/dismiss actions, rejected action decisions, action errors, and trace-present/missing run metadata.
 - `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx` also verifies announced status/alert regions and accessible finding row labels for unread severity state.
 - `web/src/components/assistant/AskShipPanel.test.tsx`, `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx`, and `web/src/components/ui/Toast.test.tsx` verify the FleetGraph drawer's mobile full-width class contract, 44px mobile action targets, and mobile toast offset above the pinned composer.
+- `api/src/services/fleetgraph/graph.test.ts`, included in `pnpm --filter @ship/api test:fleetgraph-eval`, verifies the compiled LangGraph workflow can checkpoint an approval interrupt with `MemorySaver` and resume with a human decision.
 - `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus the no-finding branch: week planning gap, project churn/stalled issues, stale engineer issue, approved-plan-change HITL, missing ownership, context chat, and no-finding.
 
 Blocked until local PostgreSQL is running:

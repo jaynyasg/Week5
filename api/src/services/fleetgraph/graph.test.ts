@@ -1,5 +1,7 @@
 import { describe, expect, it } from 'vitest';
-import { runFleetGraphState } from './graph.js';
+import { MemorySaver } from '@langchain/langgraph';
+import { runFleetGraphState, runFleetGraphWorkflow } from './graph.js';
+import { makeFleetGraphRunnableConfig } from './tracing.js';
 import type { FleetGraphContext, FleetGraphRecordRef } from './types.js';
 
 describe('FleetGraph graph state runner', () => {
@@ -76,6 +78,47 @@ describe('FleetGraph graph state runner', () => {
     expect(result.state.answer).toMatchObject({
       status: 'answered',
       citations: [expect.objectContaining({ sourceType: 'project', title: 'Launch Project' })],
+    });
+  });
+
+  it('runs as a checkpointed LangGraph workflow and resumes an approval interrupt', async () => {
+    const checkpointer = new MemorySaver();
+    const config = makeFleetGraphRunnableConfig('fleetgraph:test:thread-1');
+    const approvedPlanChanged = context({
+      weekPlan: record('plan-1', 'weekly_plan', 'Week Plan', {
+        approval_status: 'approved',
+        approved_at: '2026-05-20T00:00:00.000Z',
+        changed_after_approval: true,
+      }),
+    });
+
+    const interrupted = await runFleetGraphWorkflow({
+      context: approvedPlanChanged,
+      checkpointer,
+      config,
+    });
+
+    expect(interrupted.status).toBe('interrupted');
+    expect(interrupted.state.findings).toHaveLength(1);
+    expect(interrupted.state.proposals).toHaveLength(1);
+    expect(interrupted.state.interrupt).toMatchObject({
+      kind: 'action_proposal',
+      proposal: {
+        proposedAction: 'request_update',
+      },
+    });
+
+    const resumed = await runFleetGraphWorkflow({
+      context: approvedPlanChanged,
+      checkpointer,
+      config,
+      decision: { status: 'rejected', note: 'Needs a tighter plan diff' },
+    });
+
+    expect(resumed.status).toBe('completed');
+    expect(resumed.state.proposals[0]?.payload.decision).toEqual({
+      status: 'rejected',
+      note: 'Needs a tighter plan diff',
     });
   });
 });

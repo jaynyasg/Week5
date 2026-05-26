@@ -1,9 +1,11 @@
 import type { AssistantRouteContext, FleetGraphMode } from '@ship/shared';
 import { loadFleetGraphContext } from './context.js';
-import { runFleetGraphState } from './graph.js';
+import { runFleetGraphWorkflow } from './graph.js';
 import {
   completeFleetGraphRun,
+  getFleetGraphCheckpointer,
   makeFleetGraphThreadId,
+  makeFleetGraphRunnableConfig,
   safeCompleteFleetGraphRun,
   startFleetGraphRun,
 } from './tracing.js';
@@ -54,17 +56,35 @@ export async function runFleetGraph(input: {
     },
   });
 
-  const result = runFleetGraphState({
-    context,
-    message: input.message,
-    decision: input.decision,
-  });
+  let result: FleetGraphRunResult;
+  try {
+    result = await runFleetGraphWorkflow({
+      context,
+      message: input.message,
+      decision: input.decision,
+      checkpointer: await getFleetGraphCheckpointer(),
+      config: makeFleetGraphRunnableConfig(threadId),
+    });
+  } catch (error) {
+    result = {
+      status: 'failed',
+      error: error instanceof Error ? error.message : String(error),
+      state: {
+        context,
+        message: input.message,
+        findings: [],
+        proposals: [],
+      },
+    };
+  }
 
   await completeFleetGraphRun({
     run,
     status: result.status === 'failed' ? 'failed' : result.status === 'interrupted' ? 'interrupted' : 'completed',
     usage: estimateFleetGraphUsage(result.state),
     metadata: {
+      graphRuntime: 'langgraph',
+      checkpointThreadId: threadId,
       findingCount: result.state.findings.length,
       proposalCount: result.state.proposals.length,
       hasInterrupt: Boolean(result.state.interrupt),
