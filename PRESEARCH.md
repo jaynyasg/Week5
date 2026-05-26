@@ -1,6 +1,6 @@
 # FleetGraph Presearch
 
-Last reviewed: 2026-05-25
+Last reviewed: 2026-05-26
 
 This file records the sources used before implementation so the Week 5 build starts from explicit assumptions instead of memory.
 
@@ -87,12 +87,11 @@ Relevant findings:
 9. Add `fleetgraph_finding` as a document type.
 10. Store focal finding target metadata in document properties and use existing org associations for grouping.
 
-## Implementation Questions To Revisit
+## Resolved Implementation Answers
 
-- Which model and provider will be used for the first real run?
-- What exact detection types ship in the MVP?
-- Should the sweep run inside the web service, a Render cron job, or both for local/demo?
-- How long should finding documents, run records, and checkpoints be retained?
-- Should FleetGraph findings be indexed into Ask Ship retrieval immediately, or only after MVP?
-- What trace fields must be redacted or omitted before public trace links are submitted?
-
+- Model/provider for real runs: OpenAI `gpt-4o-mini` with LangSmith tracing enabled.
+- MVP detection paths: week planning gap, project churn/stalled issues, stale issue, approved-plan-change HITL, missing ownership, and context-aware chat.
+- Sweep/drain model: Render cron for public deployment, with the same drain command available locally; mutation events enqueue jobs and scheduled sweeps catch stale or missed conditions.
+- Retention for MVP: keep finding documents, run rows, delivery rows, proposals, and checkpoints in Ship/Postgres for reviewer evidence; long-term retention policy is deferred beyond MVP.
+- Retrieval indexing: FleetGraph findings are accessible through the FleetGraph drawer for MVP; indexing findings into Ask Ship retrieval is deferred beyond MVP.
+- Trace redaction: shared traces were reviewed before submission; graph state omits secrets, session cookies, bearer tokens, and irrelevant personal data.

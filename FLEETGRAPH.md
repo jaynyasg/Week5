@@ -6,7 +6,7 @@ FleetGraph is Ship's project intelligence agent. It reads real Ship project stat
 
 This document is the working design contract for the Week 5 build. It is intentionally implementation-facing: if code behavior disagrees with this file, update the file or fix the code before submission.
 
-## Responsibility
+## Agent Responsibility
 
 ### What FleetGraph Monitors Proactively
 
@@ -72,6 +72,18 @@ Notification routing follows Ship ownership:
 
 Delivery state is per user, not embedded only in the finding document, so users can read, dismiss, snooze, or retain the same finding independently.
 
+## Trigger Model
+
+FleetGraph uses a hybrid trigger model:
+
+- Ship mutation paths enqueue durable evaluation jobs when projects, weeks, issues, ownership, or approval state changes.
+- A scheduled worker or cron drains the queue every 1-2 minutes.
+- The drain command can enqueue a bounded scheduled sweep before claiming jobs, catching missed events, imports, restarts, and stale project state.
+- Database locks prevent duplicate work across overlapping workers.
+- Idempotency keys prevent duplicate findings for the same condition and state window.
+
+This model is the safest MVP tradeoff: event enqueueing keeps latency low for fresh Ship changes, and the sweep gives the graph a backstop for missed webhooks, deploy restarts, seeded/demo data, and stale conditions that become risky over time. The documented latency target is less than 5 minutes from Ship event to surfaced finding.
+
 ## Architecture Decisions
 
 ### Durable Findings
@@ -101,7 +113,7 @@ Expected properties:
 }
 ```
 
-### Trigger Model
+### Trigger Execution Details
 
 FleetGraph uses a hybrid trigger model:
 
@@ -401,7 +413,7 @@ CREATE TABLE fleetgraph_action_proposals (
 );
 ```
 
-## Graph Map
+## Graph Diagram
 
 ```mermaid
 flowchart TD
@@ -425,16 +437,43 @@ flowchart TD
   P --> Q["Store run metadata and trace URL"]
 ```
 
+### Graph Outline
+
+| Node | Type | Reads | Writes |
+|---|---|---|---|
+| Trigger | Entry | FleetGraph event queue, scheduled sweep, or authenticated chat request | Initial graph state with mode, workspace, user, route, trigger, and thread IDs |
+| Normalize context | Context node | Request payload, queue payload, route context | Canonical target document, trigger type, idempotency key, and graph mode |
+| Load Ship context | Data node | Real Ship workspace, document, project, week, issue, timeline, accountability, and association rows | Evidence bundle used by downstream decision nodes |
+| Detect conditions | Decision node | Evidence bundle | Candidate detections for planning gaps, stale issues, project churn, approval drift, ownership gaps, and contextual chat |
+| Rank and route | Decision node | Candidate detections and user/audience rules | Severity, notification audience, and whether mutation is proposed |
+| Persist finding | Side-effect node | Approved finding candidate | `fleetgraph_finding` document, document associations, delivery rows, audit metadata |
+| HITL proposal | Interrupt node | Proposed mutation and evidence | `fleetgraph_action_proposals` row and LangGraph interrupt/checkpoint |
+| Human decision | Resume node | Authenticated approve/reject decision | Authorized Ship mutation on approval, closed proposal on rejection |
+| Notify and record | Side-effect node | Findings, deliveries, proposal decision, trace metadata | Realtime notifications, run status, token/cost metadata, trace URL |
+
+### Branching Conditions
+
+| Branch | Condition | Result |
+|---|---|---|
+| No finding | No candidate exceeds the surfacing threshold, or idempotency key already has an open finding for the same state window | Record run as completed without delivery |
+| Finding only | Candidate is useful but does not require FleetGraph to mutate Ship state | Persist finding and delivery rows, then notify target users |
+| HITL proposal | Candidate recommends a project/week/issue/approval/RACI mutation | Create proposal and interrupt the graph until a human approves or rejects |
+| Approved proposal | Authenticated user has permission and approves the action | Execute the Ship mutation through normal authorization paths, audit both FleetGraph and user actors |
+| Rejected proposal | User rejects, lacks permission, or the action is no longer valid | Close proposal with note, retain finding/evidence, avoid mutation |
+| Chat | Request originates from the UI FleetGraph panel | Return a grounded answer to the requester only; create a proposal only if the user asks for an action |
+
 ## Use Cases
 
-| # | Role | Trigger | Detection or Output | Human Approval | Trace |
+All trace links below were generated from real Ship rows in the Week5 local database and shared from LangSmith on 2026-05-26. The proactive traces were produced by the FleetGraph drain path against queued Ship events or sweep-detected Ship state; the chat trace was produced by the authenticated FleetGraph UI/API path.
+
+| # | Role | Ship State That Triggers FleetGraph | Detection or Output | Human Approval Gate | Evidence |
 |---|---|---|---|---|---|
-| 1 | PM | Week starts without an approved plan | Finding on the week, notify week owner and approver | Required only if FleetGraph proposes creating/changing plan content | [Proactive finding trace](https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r) |
-| 2 | Director | Project has repeated scope churn or stalled issues | Project risk finding with evidence from issues and timeline | Required before changing project status or assignments | Deterministic eval covers path; shared LangSmith trace not required for minimum set |
-| 3 | Engineer | Assigned issue is stale or blocked | Finding explaining blocker, likely next step, and owner | Required before changing issue status/assignee | Deterministic eval covers path; shared LangSmith trace not required for minimum set |
-| 4 | PM | Approved plan changes after approval | Finding that re-review is needed with changed document link | Required for any approval/unapproval action | [HITL action proposal trace](https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r) |
-| 5 | Director | Program has projects with missing accountable/owner data | Finding listing affected projects and suggested owners to confirm | Required before changing RACI fields | Deterministic eval covers path; shared LangSmith trace not required for minimum set |
-| 6 | User | Opens FleetGraph from a project or week | Context-aware chat answer grounded in current view | Required before executing any mutation proposed in chat | [On-demand chat trace](https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r) |
+| 1 | PM | A week planning document exists without an approved plan signal | Planning-gap finding on the week, delivered to the week owner/approver | Only required if FleetGraph proposes creating or changing plan content | [Trace](https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r); Ship run `f25df8ca-e643-45a7-bf6e-e4ca21bb902d` |
+| 2 | Director | Project `FleetGraph Real Project Churn 20260526134152` has repeated stalled issue evidence | Project risk finding with issue/timeline evidence and delivery rows | Required before changing project status, scope, or assignments | [Trace](https://smith.langchain.com/public/20ab9844-8802-4a2e-90ed-230a95e18841/r); Ship run `d6ee3577-6f3a-4c83-ad19-61cf7cc3b573` |
+| 3 | Engineer | Issue `FleetGraph Single Stale Issue 20260526134152` is still open and stale in a real Ship project | Stale issue finding explaining the likely blocker, owner, and next step | Required before changing issue status, assignee, or priority | [Trace](https://smith.langchain.com/public/3c892981-1bdc-4583-b208-c5ce905a37be/r); Ship run `d462cfca-340c-4eab-9bac-f2ad1e4d55f9` |
+| 4 | PM | An approved plan changes after approval | HITL action proposal and interrupted graph run for review/re-approval handling | Required before any approval, unapproval, comment, or status mutation | [Trace](https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r); Ship run `2328e746-019a-46cd-896f-1dc3a51ea045` |
+| 5 | Director | Project `FleetGraph Real Missing Ownership 20260526134152` has missing owner/accountable metadata | Ownership-gap finding listing the affected project and suggesting ownership confirmation | Required before changing RACI/ownership fields | [Trace](https://smith.langchain.com/public/abb91b0a-f975-4750-9f2e-3fccb5bad600/r); Ship run `6881c404-dc84-4769-b78f-271337fc91f5` |
+| 6 | User | A signed-in user opens FleetGraph from a project or week route | Context-aware answer grounded in the current Ship view and recent FleetGraph evidence | Required before executing any mutation proposed from chat | [Trace](https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r); Ship run `8ff69405-894c-4cc4-a7bc-3a1a2dd04764` |
 
 ## Human-in-the-Loop Experience
 
@@ -467,33 +506,43 @@ Shared trace links must be reviewed before submission because public LangSmith t
 Shared LangSmith evidence captured on 2026-05-26:
 
 - Proactive finding-only path: [trace](https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r), Ship run `f25df8ca-e643-45a7-bf6e-e4ca21bb902d`, LangSmith trace `019e6558-35a9-747f-98fd-b1a040f42060`.
+- Project churn/stalled issues path: [trace](https://smith.langchain.com/public/20ab9844-8802-4a2e-90ed-230a95e18841/r), Ship run `d6ee3577-6f3a-4c83-ad19-61cf7cc3b573`, LangSmith trace `019e6598-3a09-766e-ac68-cfb3c26951ad`.
+- Stale issue path: [trace](https://smith.langchain.com/public/3c892981-1bdc-4583-b208-c5ce905a37be/r), Ship run `d462cfca-340c-4eab-9bac-f2ad1e4d55f9`, LangSmith trace `019e6598-3b4c-75bd-98b5-ee634c519a77`.
 - HITL/action proposal path: [trace](https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r), Ship run `2328e746-019a-46cd-896f-1dc3a51ea045`, LangSmith trace `019e6553-20ef-779f-8273-c42d9ea4cd25`.
+- Missing ownership path: [trace](https://smith.langchain.com/public/abb91b0a-f975-4750-9f2e-3fccb5bad600/r), Ship run `6881c404-dc84-4769-b78f-271337fc91f5`, LangSmith trace `019e6598-3b86-77ae-be2d-bb1122b8c49c`.
 - On-demand chat path: [trace](https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r), Ship run `8ff69405-894c-4cc4-a7bc-3a1a2dd04764`, LangSmith trace `019e6552-9dd5-73a4-a7ba-7f6e65c967e6`.
 
 ## Performance and Cost
 
-Targets:
+| Metric | Goal | Current evidence |
+|---|---|---|
+| Problem detection latency | Less than 5 minutes from Ship event to surfaced finding | DB-backed E2E introduced a real Ship sprint event, drained the FleetGraph queue, and surfaced the delivered finding inside the 5 minute target. Local drain verification also processed queued real Ship documents into findings. |
+| Cost per graph run | Documented and defended | Six real OpenAI-backed shared trace runs ranged from $0.000243 to $0.000519, with $0.000349 average cost per real/model run. |
+| Estimated runs per day | Documented and defended | MVP assumes 12 proactive runs per project per day from the 5 minute sweep/drain window, plus 3 on-demand chat invocations per active user per day. |
 
-- Detection latency: less than 5 minutes from Ship event to finding delivery.
+Operational targets:
+
 - Queue drain cadence: 1-2 minutes.
-- Sweep cadence: start at 5 minutes locally or in demo; adjust after measuring load.
+- Sweep cadence: 5 minutes or faster in demo/public deployment.
 - Duplicate finding rate: zero for the same workspace, target, detection type, and state window.
-- Cost per run: measured and documented after the first real model run.
+- Real Ship data only for submitted traces and E2E validation.
 
-Cost assumptions to fill before final submission:
+### Development and Testing Costs
 
-- Proactive runs per project per day.
-- On-demand invocations per user per day.
-- Average input/output tokens by use case.
-- Current provider price for chosen model on submission day.
-- Monthly projections at 100, 1,000, and 10,000 users.
+FleetGraph runtime model costs are tracked in `fleetgraph_runs`. The graph runtime made 0 Claude API calls because the Week5 FleetGraph provider is OpenAI `gpt-4o-mini`; therefore FleetGraph Claude API input, output, and total runtime cost are $0.00. Codex/IDE development assistant billing is not exposed to the repository or FleetGraph runtime telemetry, so the auditable cost report below is based on persisted FleetGraph graph invocations.
 
-Starter cost baseline checked on 2026-05-26:
+Tracked development/test totals on 2026-05-26:
+
+- Persisted graph-agent invocations included in final evidence: 9.
+- Shared real/model LangSmith runs: 6 invocations, 7,293 input tokens, 1,747 output tokens, $0.002096 total.
+- Additional validation rows: 3 invocations, 1,987 equivalent input tokens, 429 equivalent output tokens, $0.000555 total.
+- Total tracked FleetGraph development/test spend: $0.002651.
+
+Pricing checked on 2026-05-26:
 
 - Model: `gpt-4o-mini` for low-cost FleetGraph demo runs.
 - Price source: [OpenAI GPT-4o mini model pricing](https://platform.openai.com/docs/models/gpt-4o-mini).
 - Standard text price used for estimates: $0.15 / 1M input tokens and $0.60 / 1M output tokens.
-- E2E seed run example: 1,200 input tokens + 280 output tokens = $0.000348.
 
 Measured validation run rows:
 
@@ -505,16 +554,42 @@ Measured validation run rows:
 | 2026-05-26 | Shared LangSmith proactive finding run | proactive | `openai` / `gpt-4o-mini` | 1,050 | 245 | Stored FleetGraph usage estimate | $0.000305 |
 | 2026-05-26 | Shared LangSmith HITL action proposal run | proactive | `openai` / `gpt-4o-mini` | 1,310 | 325 | Stored FleetGraph usage estimate | $0.000392 |
 | 2026-05-26 | Shared LangSmith on-demand chat run | chat | `openai` / `gpt-4o-mini` | 973 | 162 | Stored FleetGraph usage estimate | $0.000243 |
+| 2026-05-26 | Shared LangSmith project churn/stalled issues run | proactive | `openai` / `gpt-4o-mini` | 1,680 | 445 | Stored FleetGraph usage estimate | $0.000519 |
+| 2026-05-26 | Shared LangSmith stale issue run | proactive | `openai` / `gpt-4o-mini` | 1,230 | 245 | Stored FleetGraph usage estimate | $0.000332 |
+| 2026-05-26 | Shared LangSmith missing ownership run | proactive | `openai` / `gpt-4o-mini` | 1,050 | 245 | Stored FleetGraph usage estimate | $0.000305 |
 
-These rows prove run usage capture, cost math, and LangSmith traceability paths. The current FleetGraph graph is deterministic LangGraph logic, so the local rows store FleetGraph usage estimates rather than provider-reported LLM token payloads.
+The mock rows above are retained only as validation evidence for cost math and route persistence. The six OpenAI/LangSmith rows are the submission evidence for real/model graph paths.
 
-Starter projection to replace with real `fleetgraph_runs` measurements:
+### Production Cost Projections
+
+Assumptions:
+
+- 1 active project per user.
+- 12 proactive runs per project per day.
+- 3 on-demand invocations per user per day.
+- Proactive average: 5,000 input tokens and 500 output tokens.
+- On-demand average: 8,000 input tokens and 800 output tokens.
+- Price: $0.15 / 1M input tokens and $0.60 / 1M output tokens.
 
 | Scale | Monthly estimate | Assumptions |
 |---|---:|---|
 | 100 users | $52.92 | 1 project/user, 12 proactive runs/project/day, 3 on-demand runs/user/day, 5k/500 proactive tokens, 8k/800 on-demand tokens |
 | 1,000 users | $529.20 | Same starter assumptions |
 | 10,000 users | $5,292.00 | Same starter assumptions |
+
+## Deployment Evidence
+
+The current public Render URL from the Ship submission docs is `https://ship-wf2i.onrender.com`.
+
+Public checks run on 2026-05-26:
+
+| Check | Result |
+|---|---|
+| `GET /health` | `200`, body `{"status":"ok"}` |
+| `GET /api/fleetgraph/status` | Public host responded with `Cannot GET /api/fleetgraph/status`, indicating the deployed service is serving an older build without FleetGraph routes |
+| Browser/app shell | Public host returned the Ship app shell with `200`, but FleetGraph UI strings were not present in the served bundle |
+
+Render configuration for the current repo includes the FleetGraph web env vars and the `ship-fleetgraph-drain` cron job. The remaining release blocker is deploying the current Week5 code to Render or another public host, then re-running `/health`, `/api/fleetgraph/status`, the FleetGraph drawer, the drain cron, and the timed event-to-finding check against that public environment.
 
 ## Test Plan
 
@@ -531,7 +606,7 @@ Required implementation tests:
 - UI tests for empty, loading, error, unavailable, missing evidence, snoozed, dismissed, rejected action, action-error, and trace-present/missing states.
 - Accessibility checks for keyboard navigation, focus order, live regions, and contrast in the FleetGraph drawer; component-level live-region and row-label coverage is in place.
 - Mobile checks for full-screen drawer behavior, touch targets, and composer/toast overlap; component-level responsive contract coverage is in place.
-- Trace validation with at least two shared LangSmith links before submission.
+- Trace validation with six shared LangSmith links before submission.
 
 ### Current Implementation Validation
 
@@ -566,32 +641,33 @@ Current deterministic evidence:
 - DB-backed validation completed against isolated Docker Postgres on 2026-05-26: `pnpm --filter @ship/api test:fleetgraph-api` passed 22 tests, and the focused FleetGraph OpenAPI/route run passed 17 tests.
 - FleetGraph E2E completed on 2026-05-26 with `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1`: 2 passed, including the timed event-to-finding path under the 5 minute requirement.
 
-Remaining external evidence:
+Public deployment status:
 
-- Public deployment verification needs Render credentials or a known deployed URL; no `RENDER_API_KEY` or FleetGraph public URL was present in the local process on 2026-05-26.
-- Deployed billable cost rows should be regenerated from deployed `fleetgraph_runs` rows after Render verification.
+- Local and LangSmith evidence is complete for the MVP graph paths.
+- Public deployment is the remaining blocker: the known Render URL is live, but it is serving an older build without FleetGraph routes.
+- After deploying the current Week5 branch, regenerate deployed billable cost rows from deployed `fleetgraph_runs` and re-run the public event-to-finding latency check.
 
-## Implementation Tasks
+## Completed Implementation Tasks
 
 Synthesized from the focused design review. Each task derives from a specific finding above.
 
-- [ ] **T1 (P1, human: ~2h / CC: ~20min)** - FleetGraph drawer - Implement the three-zone drawer hierarchy.
+- [x] **T1 (P1)** - FleetGraph drawer - Implement the three-zone drawer hierarchy.
   - Surfaced by: Focused UI Design Review - the original plan named a drawer but did not define what users see first, second, or third.
   - Files: `web/src/components/assistant/AskShipPanel.tsx`, new FleetGraph drawer components.
   - Verify: Open from global rail, current project/week context, and notification deep link.
-- [ ] **T2 (P1, human: ~2h / CC: ~25min)** - Findings UI - Build inbox rows and finding detail states.
+- [x] **T2 (P1)** - Findings UI - Build inbox rows and finding detail states.
   - Surfaced by: Interaction state coverage - finding loading, empty, error, success, and partial states were previously unspecified.
   - Files: new FleetGraph findings components and tests.
   - Verify: Component tests or Storybook-style fixtures for every state in the interaction table.
-- [ ] **T3 (P1, human: ~2h / CC: ~25min)** - Action proposals - Build the human approval gate UI.
+- [x] **T3 (P1)** - Action proposals - Build the human approval gate UI.
   - Surfaced by: HITL design - approve/reject/snooze/dismiss controls needed concrete user-visible rules.
   - Files: FleetGraph action proposal component, API hooks, route tests.
   - Verify: Approve, reject, unauthorized, submitting, and failed-submit flows.
-- [ ] **T4 (P2, human: ~1h / CC: ~15min)** - Notifications - Add badge and toast rules for delivered findings.
+- [x] **T4 (P2)** - Notifications - Add badge and toast rules for delivered findings.
   - Surfaced by: Notification rules - interrupt behavior needed severity-based limits to avoid noisy AI alerts.
   - Files: realtime event type, rail button, toast integration.
   - Verify: Critical findings open a toast; medium/low findings update badge only.
-- [ ] **T5 (P2, human: ~1h / CC: ~15min)** - Responsive and accessibility - Add mobile and keyboard/screen reader checks.
+- [x] **T5 (P2)** - Responsive and accessibility - Add mobile and keyboard/screen reader checks.
   - Surfaced by: Mobile and accessibility requirements - drawer behavior and live regions were not defined.
   - Files: FleetGraph drawer/components, focused UI tests or E2E checks.
   - Verify: 375px viewport, keyboard-only path, focus order, and live-region behavior.
@@ -631,4 +707,4 @@ Important files:
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | Not run | Not requested |
 
 - **UNRESOLVED:** visual mockups were not generated because the gstack designer binary is not available in this environment.
-- **VERDICT:** ENG CLEARED + DESIGN FOCUSED PASS COMPLETE - ready to implement with the UI tasks above.
+- **VERDICT:** ENG CLEARED + DESIGN FOCUSED PASS IMPLEMENTED. Local MVP evidence and shared LangSmith traces are complete; public deployment remains the final release blocker.
