@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { FleetGraphFindingDetail, FleetGraphFindingSummary } from '@ship/shared';
+import type { FleetGraphFindingDetail, FleetGraphFindingSummary, FleetGraphRunSummary } from '@ship/shared';
 import { useFleetGraph } from '@/hooks/useFleetGraph';
 import { FleetGraphPanel } from './FleetGraphPanel';
 
@@ -13,6 +13,7 @@ const useFleetGraphMock = vi.mocked(useFleetGraph);
 describe('FleetGraphPanel', () => {
   afterEach(() => {
     useFleetGraphMock.mockReset();
+    vi.useRealTimers();
   });
 
   it('renders delivered findings and reports unread count', async () => {
@@ -60,6 +61,121 @@ describe('FleetGraphPanel', () => {
       status: 'approved',
       note: undefined,
     });
+  });
+
+  it('renders empty, error, and unavailable inbox states', () => {
+    useFleetGraphMock.mockReturnValue(fleetGraphState());
+    const { rerender } = render(<FleetGraphPanel />);
+
+    expect(screen.getByText('No FleetGraph findings.')).toBeInTheDocument();
+
+    useFleetGraphMock.mockReturnValue(fleetGraphState({
+      findingsError: new Error('network'),
+    }));
+    rerender(<FleetGraphPanel />);
+    expect(screen.getByText('FleetGraph findings could not load.')).toBeInTheDocument();
+
+    useFleetGraphMock.mockReturnValue(fleetGraphState({
+      status: {
+        ...fleetGraphState().status!,
+        available: false,
+        missingConfiguration: ['OPENAI_API_KEY'],
+      },
+    }));
+    rerender(<FleetGraphPanel />);
+    expect(screen.getByText('FleetGraph is unavailable.')).toBeInTheDocument();
+    expect(screen.getByText('Missing OPENAI_API_KEY')).toBeInTheDocument();
+    expect(screen.getByLabelText('FleetGraph message')).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Send FleetGraph message' })).toBeDisabled();
+  });
+
+  it('renders selected finding loading and empty detail states', () => {
+    useFleetGraphMock.mockReturnValue(fleetGraphState({
+      selectedFindingId: findingSummary.id,
+      selectedFindingLoading: true,
+    }));
+    const { rerender } = render(<FleetGraphPanel />);
+
+    expect(screen.getByText('Loading finding...')).toBeInTheDocument();
+
+    useFleetGraphMock.mockReturnValue(fleetGraphState({
+      selectedFindingId: findingSummary.id,
+      selectedFinding: undefined,
+      selectedFindingLoading: false,
+    }));
+    rerender(<FleetGraphPanel />);
+    expect(screen.getByText('Select a FleetGraph finding.')).toBeInTheDocument();
+  });
+
+  it('snoozes, dismisses, and labels missing trace details for a selected finding', () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-05-25T12:00:00.000Z'));
+    const updateSelectedDelivery = vi.fn();
+    useFleetGraphMock.mockReturnValue(fleetGraphState({
+      selectedFindingId: findingSummary.id,
+      selectedFinding: findingDetail,
+      selectedRun: runSummary,
+      updateSelectedDelivery,
+    }));
+
+    render(<FleetGraphPanel />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Snooze' }));
+    expect(updateSelectedDelivery).toHaveBeenCalledWith(
+      'snoozed',
+      '2026-05-26T12:00:00.000Z',
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: 'Dismiss' }));
+    expect(updateSelectedDelivery).toHaveBeenCalledWith('dismissed');
+    expect(screen.getByText('No LangSmith trace recorded.')).toBeInTheDocument();
+  });
+
+  it('shows missing evidence and submits rejected action decisions with notes', () => {
+    const decideAction = vi.fn();
+    useFleetGraphMock.mockReturnValue(fleetGraphState({
+      selectedFindingId: findingSummary.id,
+      selectedFinding: {
+        ...findingDetail,
+        evidence: [],
+      },
+      decisionError: new Error('denied'),
+      decideAction,
+    }));
+
+    render(<FleetGraphPanel />);
+
+    expect(screen.getByText('No evidence attached.')).toBeInTheDocument();
+    expect(screen.getByText('Action update failed.')).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText('FleetGraph action decision note'), {
+      target: { value: 'Needs more context' },
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Reject' }));
+
+    expect(decideAction).toHaveBeenCalledWith('proposal-1', {
+      status: 'rejected',
+      note: 'Needs more context',
+    });
+  });
+
+  it('renders a LangSmith trace link when run metadata includes one', () => {
+    useFleetGraphMock.mockReturnValue(fleetGraphState({
+      selectedFindingId: findingSummary.id,
+      selectedFinding: findingDetail,
+      selectedRun: {
+        ...runSummary,
+        langsmithTraceUrl: 'https://smith.langchain.com/public/trace-1/r',
+      },
+    }));
+
+    render(<FleetGraphPanel />);
+
+    fireEvent.click(screen.getByText('Run details'));
+    expect(screen.getByRole('link', { name: 'LangSmith trace' })).toHaveAttribute(
+      'href',
+      'https://smith.langchain.com/public/trace-1/r',
+    );
   });
 });
 
@@ -161,4 +277,23 @@ const findingDetail: FleetGraphFindingDetail = {
   lastObservedAt: '2026-05-25T12:00:00.000Z',
   resolvedAt: null,
   dismissedReason: null,
+};
+
+const runSummary: FleetGraphRunSummary = {
+  id: 'run-1',
+  mode: 'proactive',
+  triggerType: 'document.updated',
+  triggerId: 'doc-1',
+  threadId: 'fleetgraph:workspace-1:proactive:doc-1',
+  status: 'completed',
+  provider: 'mock',
+  model: 'mock-fleetgraph',
+  inputTokens: 1200,
+  outputTokens: 280,
+  estimatedCostUsd: 0.000348,
+  langsmithTraceUrl: null,
+  metadata: { findingCount: 1 },
+  error: null,
+  createdAt: '2026-05-25T12:00:00.000Z',
+  completedAt: '2026-05-25T12:00:03.000Z',
 };

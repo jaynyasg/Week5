@@ -507,7 +507,7 @@ Required implementation tests:
 - E2E test showing a Ship event becomes a UI notification and finding within 5 minutes.
 - E2E test showing an on-demand FleetGraph chat uses the current project/week context.
 - E2E or integration test for approve/reject action proposal flow.
-- UI tests for empty, loading, error, partial, snoozed, dismissed, and unauthorized action states.
+- UI tests for empty, loading, error, unavailable, missing evidence, snoozed, dismissed, rejected action, action-error, and trace-present/missing states.
 - Accessibility checks for keyboard navigation, focus order, live regions, and contrast in the FleetGraph drawer.
 - Mobile viewport check for full-screen drawer behavior and composer/toast overlap.
 - Trace validation with at least two shared LangSmith links before submission.
@@ -533,6 +533,7 @@ Current deterministic evidence:
 - `e2e/fleetgraph.spec.ts` opens FleetGraph from a Ship document, marks the delivered finding read, rejects the action proposal with a note, and verifies contextual chat response grounding.
 - `e2e/fleetgraph.spec.ts` also creates a real sprint document event, drains the FleetGraph queue against the isolated test database, verifies a delivered planning-gap finding appears in the drawer within the 5 minute latency target, and confirms the linked `fleetgraph_runs` row records token/cost metadata.
 - `api/src/routes/fleetgraph.test.ts` covers authentication, CSRF, per-user delivery visibility, admin run/finding access, action-decision authorization, and audit logging with run/trace metadata.
+- `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx` covers delivered findings, loading/empty/error/unavailable states, missing evidence, snooze/dismiss actions, rejected action decisions, action errors, and trace-present/missing run metadata.
 - `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus the no-finding branch: week planning gap, project churn/stalled issues, stale engineer issue, approved-plan-change HITL, missing ownership, context chat, and no-finding.
 
 Blocked until local PostgreSQL is running:

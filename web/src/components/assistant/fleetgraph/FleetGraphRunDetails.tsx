@@ -34,7 +34,9 @@ export function FleetGraphRunDetails({ run, loading }: FleetGraphRunDetailsProps
         >
           LangSmith trace
         </a>
-      ) : null}
+      ) : (
+        <p className="mt-2 text-muted">No LangSmith trace recorded.</p>
+      )}
     </details>
   );
 }

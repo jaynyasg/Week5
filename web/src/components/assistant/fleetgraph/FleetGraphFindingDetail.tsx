@@ -57,9 +57,9 @@ export function FleetGraphFindingDetail({
         <h4 className="text-xs font-semibold uppercase text-muted">Rationale</h4>
         <p className="mt-1 text-sm leading-6 text-foreground">{finding.rationale}</p>
       </section>
-      {finding.evidence.length ? (
-        <section>
-          <h4 className="text-xs font-semibold uppercase text-muted">Evidence</h4>
+      <section>
+        <h4 className="text-xs font-semibold uppercase text-muted">Evidence</h4>
+        {finding.evidence.length ? (
           <ul className="mt-2 flex flex-col gap-2">
             {finding.evidence.map((item) => (
               <li key={`${item.sourceType}-${item.sourceId}`} className="rounded-md border border-border bg-card px-3 py-2">
@@ -68,8 +68,10 @@ export function FleetGraphFindingDetail({
               </li>
             ))}
           </ul>
-        </section>
-      ) : null}
+        ) : (
+          <p className="mt-1 text-sm text-muted">No evidence attached.</p>
+        )}
+      </section>
       {finding.proposals.length ? (
         <div className="flex flex-col gap-2">
           {finding.proposals.map((proposal) => (
