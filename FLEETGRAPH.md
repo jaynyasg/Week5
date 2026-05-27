@@ -464,16 +464,27 @@ flowchart TD
 
 ## Use Cases
 
-All trace links below were generated from real Ship rows in the Week5 local database and shared from LangSmith on 2026-05-26. The proactive traces were produced by the FleetGraph drain path against queued Ship events or sweep-detected Ship state; the chat trace was produced by the authenticated FleetGraph UI/API path.
+| # | Role | Trigger (Ship State) | Agent Detects / Produces | Human Decides |
+|---|---|---|---|---|
+| 1 | PM | A week planning document exists without an approved plan signal | Planning-gap finding on the week, delivered to the week owner/approver | Only required if FleetGraph proposes creating or changing plan content |
+| 2 | Director | A project has repeated stalled issue evidence across multiple sprints | Project risk finding with issue/timeline evidence and delivery rows | Required before changing project status, scope, or assignments |
+| 3 | Engineer | An issue is still open and stale in a real Ship project | Stale issue finding explaining the likely blocker, owner, and next step | Required before changing issue status, assignee, or priority |
+| 4 | PM | An approved plan changes after approval | HITL action proposal and interrupted graph run for review/re-approval handling | Required before any approval, unapproval, comment, or status mutation |
+| 5 | Director | A project has missing owner/accountable metadata | Ownership-gap finding listing the affected project and suggesting ownership confirmation | Required before changing RACI/ownership fields |
+| 6 | User | A signed-in user opens FleetGraph from a project or week route | Context-aware answer grounded in the current Ship view and recent FleetGraph evidence | Required before executing any mutation proposed from chat |
 
-| # | Role | Ship State That Triggers FleetGraph | Detection or Output | Human Approval Gate | Evidence |
-|---|---|---|---|---|---|
-| 1 | PM | A week planning document exists without an approved plan signal | Planning-gap finding on the week, delivered to the week owner/approver | Only required if FleetGraph proposes creating or changing plan content | [Trace](https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r); Ship run `f25df8ca-e643-45a7-bf6e-e4ca21bb902d` |
-| 2 | Director | Project `FleetGraph Real Project Churn 20260526134152` has repeated stalled issue evidence | Project risk finding with issue/timeline evidence and delivery rows | Required before changing project status, scope, or assignments | [Trace](https://smith.langchain.com/public/20ab9844-8802-4a2e-90ed-230a95e18841/r); Ship run `d6ee3577-6f3a-4c83-ad19-61cf7cc3b573` |
-| 3 | Engineer | Issue `FleetGraph Single Stale Issue 20260526134152` is still open and stale in a real Ship project | Stale issue finding explaining the likely blocker, owner, and next step | Required before changing issue status, assignee, or priority | [Trace](https://smith.langchain.com/public/3c892981-1bdc-4583-b208-c5ce905a37be/r); Ship run `d462cfca-340c-4eab-9bac-f2ad1e4d55f9` |
-| 4 | PM | An approved plan changes after approval | HITL action proposal and interrupted graph run for review/re-approval handling | Required before any approval, unapproval, comment, or status mutation | [Trace](https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r); Ship run `2328e746-019a-46cd-896f-1dc3a51ea045` |
-| 5 | Director | Project `FleetGraph Real Missing Ownership 20260526134152` has missing owner/accountable metadata | Ownership-gap finding listing the affected project and suggesting ownership confirmation | Required before changing RACI/ownership fields | [Trace](https://smith.langchain.com/public/abb91b0a-f975-4750-9f2e-3fccb5bad600/r); Ship run `6881c404-dc84-4769-b78f-271337fc91f5` |
-| 6 | User | A signed-in user opens FleetGraph from a project or week route | Context-aware answer grounded in the current Ship view and recent FleetGraph evidence | Required before executing any mutation proposed from chat | [Trace](https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r); Ship run `8ff69405-894c-4cc4-a7bc-3a1a2dd04764` |
+## Test Cases
+
+All traces were generated from real Ship rows in the Week5 local database and shared from LangSmith on 2026-05-26. Proactive traces were produced by the FleetGraph drain path against queued Ship events or sweep-detected state; the chat trace was produced by the authenticated FleetGraph UI/API path.
+
+| # | Ship State | Expected Output | Trace Link |
+|---|---|---|---|
+| 1 | A week planning document exists without an approved plan signal | Planning-gap finding delivered to the week owner/approver | [Trace](https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r); Ship run `f25df8ca-e643-45a7-bf6e-e4ca21bb902d` |
+| 2 | Project `FleetGraph Real Project Churn 20260526134152` has repeated stalled issue evidence | Project risk finding with issue/timeline evidence and delivery rows | [Trace](https://smith.langchain.com/public/20ab9844-8802-4a2e-90ed-230a95e18841/r); Ship run `d6ee3577-6f3a-4c83-ad19-61cf7cc3b573` |
+| 3 | Issue `FleetGraph Single Stale Issue 20260526134152` is still open and stale in a real Ship project | Stale issue finding explaining the likely blocker, owner, and next step | [Trace](https://smith.langchain.com/public/3c892981-1bdc-4583-b208-c5ce905a37be/r); Ship run `d462cfca-340c-4eab-9bac-f2ad1e4d55f9` |
+| 4 | An approved plan changes after approval | HITL action proposal, graph interrupted awaiting human decision | [Trace](https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r); Ship run `2328e746-019a-46cd-896f-1dc3a51ea045` |
+| 5 | Project `FleetGraph Real Missing Ownership 20260526134152` has missing owner/accountable metadata | Ownership-gap finding listing the affected project and suggesting ownership confirmation | [Trace](https://smith.langchain.com/public/abb91b0a-f975-4750-9f2e-3fccb5bad600/r); Ship run `6881c404-dc84-4769-b78f-271337fc91f5` |
+| 6 | A signed-in user opens FleetGraph from a project or week route | Context-aware answer grounded in the current Ship view and recent FleetGraph evidence | [Trace](https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r); Ship run `8ff69405-894c-4cc4-a7bc-3a1a2dd04764` |
 
 ## Human-in-the-Loop Experience
 
@@ -544,21 +555,26 @@ Pricing checked on 2026-05-26:
 - Price source: [OpenAI GPT-4o mini model pricing](https://platform.openai.com/docs/models/gpt-4o-mini).
 - Standard text price used for estimates: $0.15 / 1M input tokens and $0.60 / 1M output tokens.
 
-Measured validation run rows:
+**Submission evidence — real model runs (OpenAI / gpt-4o-mini, LangSmith-traced):**
 
-| Date | Source | Mode | Provider/model | Input tokens | Output tokens | Cost basis | Cost |
-|---|---|---|---|---:|---:|---|---:|
-| 2026-05-26 | E2E seed `fleetgraph_runs` row | proactive | `mock` / `mock-fleetgraph` | 1,200 | 280 | Stored seed estimate at current `gpt-4o-mini` text pricing | $0.000348 |
-| 2026-05-26 | Isolated Docker Postgres `fleetgraph_runs` row | chat | `mock` / `mock-fleetgraph` | 787 | 149 | Recomputed `gpt-4o-mini` equivalent from actual run tokens | $0.000207 |
-| 2026-05-26 | Isolated Docker Postgres `fleetgraph_runs` row | chat | `mock` / `mock-fleetgraph` | 0 | 0 | No provider usage captured for this validation row | $0.000000 |
-| 2026-05-26 | Shared LangSmith proactive finding run | proactive | `openai` / `gpt-4o-mini` | 1,050 | 245 | Stored FleetGraph usage estimate | $0.000305 |
-| 2026-05-26 | Shared LangSmith HITL action proposal run | proactive | `openai` / `gpt-4o-mini` | 1,310 | 325 | Stored FleetGraph usage estimate | $0.000392 |
-| 2026-05-26 | Shared LangSmith on-demand chat run | chat | `openai` / `gpt-4o-mini` | 973 | 162 | Stored FleetGraph usage estimate | $0.000243 |
-| 2026-05-26 | Shared LangSmith project churn/stalled issues run | proactive | `openai` / `gpt-4o-mini` | 1,680 | 445 | Stored FleetGraph usage estimate | $0.000519 |
-| 2026-05-26 | Shared LangSmith stale issue run | proactive | `openai` / `gpt-4o-mini` | 1,230 | 245 | Stored FleetGraph usage estimate | $0.000332 |
-| 2026-05-26 | Shared LangSmith missing ownership run | proactive | `openai` / `gpt-4o-mini` | 1,050 | 245 | Stored FleetGraph usage estimate | $0.000305 |
+| Date | Source | Mode | Provider/model | Input tokens | Output tokens | Cost |
+|---|---|---|---|---:|---:|---:|
+| 2026-05-26 | Shared LangSmith proactive finding run | proactive | `openai` / `gpt-4o-mini` | 1,050 | 245 | $0.000305 |
+| 2026-05-26 | Shared LangSmith HITL action proposal run | proactive | `openai` / `gpt-4o-mini` | 1,310 | 325 | $0.000392 |
+| 2026-05-26 | Shared LangSmith on-demand chat run | chat | `openai` / `gpt-4o-mini` | 973 | 162 | $0.000243 |
+| 2026-05-26 | Shared LangSmith project churn/stalled issues run | proactive | `openai` / `gpt-4o-mini` | 1,680 | 445 | $0.000519 |
+| 2026-05-26 | Shared LangSmith stale issue run | proactive | `openai` / `gpt-4o-mini` | 1,230 | 245 | $0.000332 |
+| 2026-05-26 | Shared LangSmith missing ownership run | proactive | `openai` / `gpt-4o-mini` | 1,050 | 245 | $0.000305 |
 
-The mock rows above are retained only as validation evidence for cost math and route persistence. The six OpenAI/LangSmith rows are the submission evidence for real/model graph paths.
+**Route and cost-math validation rows (not submission evidence — mock provider, no LLM calls):**
+
+These rows are retained only to verify that the drain route correctly persists run metadata and that cost arithmetic is correct end-to-end. They do not represent real model invocations.
+
+| Date | Source | Mode | Provider/model | Input tokens | Output tokens | Cost |
+|---|---|---|---|---:|---:|---:|
+| 2026-05-26 | E2E seed `fleetgraph_runs` row | proactive | `mock` / `mock-fleetgraph` | 1,200 | 280 | $0.000348 |
+| 2026-05-26 | Isolated Docker Postgres `fleetgraph_runs` row | chat | `mock` / `mock-fleetgraph` | 787 | 149 | $0.000207 |
+| 2026-05-26 | Isolated Docker Postgres `fleetgraph_runs` row | chat | `mock` / `mock-fleetgraph` | 0 | 0 | $0.000000 |
 
 ### Production Cost Projections
 
