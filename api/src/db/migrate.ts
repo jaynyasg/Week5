@@ -35,12 +35,21 @@ async function migrate() {
   try {
     console.log('Running database migrations...');
 
-    // Step 1: Run schema.sql for initial setup
+    // Step 1: Run schema.sql for initial setup. Existing databases can hit
+    // duplicate-object errors from legacy bootstrap SQL; migrations must still run.
     const schemaPath = join(__dirname, 'schema.sql');
     const schema = readFileSync(schemaPath, 'utf-8');
-    await pool.query(schema);
-    await pool.query("ALTER TYPE relationship_type ADD VALUE IF NOT EXISTS 'depends_on'");
-    console.log('✅ Schema applied');
+    try {
+      await pool.query(schema);
+      await pool.query("ALTER TYPE relationship_type ADD VALUE IF NOT EXISTS 'depends_on'");
+      console.log('✅ Schema applied');
+    } catch (error) {
+      if (isAlreadyExistsError(error)) {
+        console.log('ℹ️  Base schema already exists; continuing to migrations');
+      } else {
+        throw error;
+      }
+    }
 
     // Step 2: Create migrations tracking table
     await pool.query(`
@@ -89,6 +98,14 @@ async function migrate() {
         migrationsRun++;
       } catch (err) {
         await client.query('ROLLBACK');
+        if (isAlreadyExistsError(err)) {
+          await pool.query(
+            'INSERT INTO schema_migrations (version) VALUES ($1) ON CONFLICT (version) DO NOTHING',
+            [version],
+          );
+          console.log(`  ℹ️  ${file} already reflected in schema; marked applied`);
+          continue;
+        }
         throw err;
       } finally {
         client.release();
@@ -102,17 +119,19 @@ async function migrate() {
     }
 
   } catch (error) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    // "already exists" errors from schema.sql are fine
-    if (errorMessage.includes('already exists')) {
-      console.log('Database schema already exists, continuing...');
-    } else {
-      console.error('Database migration failed:', error);
-      process.exit(1);
-    }
+    console.error('Database migration failed:', error);
+    process.exit(1);
   } finally {
     await pool.end();
   }
 }
 
 migrate();
+
+function isAlreadyExistsError(error: unknown): boolean {
+  const code = typeof error === 'object' && error !== null && 'code' in error
+    ? String((error as { code?: unknown }).code)
+    : '';
+  const message = error instanceof Error ? error.message : String(error);
+  return code === '42P07' || code === '42710' || message.includes('already exists');
+}
