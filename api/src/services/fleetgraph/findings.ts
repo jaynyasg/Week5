@@ -5,11 +5,15 @@ import type {
   FleetGraphFindingCandidate,
 } from './types.js';
 
+let findingDocumentTypeReady: Promise<void> | null = null;
+
 export async function persistFleetGraphFinding(input: {
   context: FleetGraphContext;
   candidate: FleetGraphFindingCandidate;
   runId?: string | null;
 }): Promise<string> {
+  await ensureFleetGraphFindingDocumentType();
+
   const properties = {
     status: 'open',
     severity: input.candidate.severity,
@@ -26,35 +30,46 @@ export async function persistFleetGraphFinding(input: {
     last_observed_at: input.context.now,
     fleetgraph_key: input.candidate.key,
   };
+  const serializedProperties = JSON.stringify(properties);
 
-  const result = await pool.query<{ id: string }>(
-    `INSERT INTO documents (workspace_id, document_type, title, properties, created_by, visibility)
-     VALUES ($1, 'fleetgraph_finding', $2, $3, $4, 'workspace')
-     ON CONFLICT (workspace_id, ((properties->>'fleetgraph_key')))
-       WHERE document_type = 'fleetgraph_finding'
-         AND properties ? 'fleetgraph_key'
-         AND deleted_at IS NULL
-     DO UPDATE SET
-       title = EXCLUDED.title,
-       properties = documents.properties
-         || jsonb_build_object(
-           'summary', EXCLUDED.properties->>'summary',
-           'rationale', EXCLUDED.properties->>'rationale',
-           'run_id', EXCLUDED.properties->'run_id',
-           'evidence', EXCLUDED.properties->'evidence',
-           'last_observed_at', EXCLUDED.properties->>'last_observed_at'
-         ),
-       updated_at = now()
-     RETURNING id`,
-    [
-      input.context.workspaceId,
-      input.candidate.title,
-      JSON.stringify(properties),
-      toNullableUuid(input.context.userId),
-    ],
-  );
+  const updated = await updateExistingFleetGraphFinding({
+    workspaceId: input.context.workspaceId,
+    key: input.candidate.key,
+    title: input.candidate.title,
+    properties: serializedProperties,
+  });
+  if (updated) {
+    await persistFindingAssociations(input.context, updated);
+    return updated;
+  }
 
-  const findingDocumentId = result.rows[0]!.id;
+  let findingDocumentId: string;
+  try {
+    const result = await pool.query<{ id: string }>(
+      `INSERT INTO documents (workspace_id, document_type, title, properties, created_by, visibility)
+       VALUES ($1, 'fleetgraph_finding', $2, $3, $4, 'workspace')
+       RETURNING id`,
+      [
+        input.context.workspaceId,
+        input.candidate.title,
+        serializedProperties,
+        toNullableUuid(input.context.userId),
+      ],
+    );
+    findingDocumentId = result.rows[0]!.id;
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+
+    const recovered = await updateExistingFleetGraphFinding({
+      workspaceId: input.context.workspaceId,
+      key: input.candidate.key,
+      title: input.candidate.title,
+      properties: serializedProperties,
+    });
+    if (!recovered) throw error;
+    findingDocumentId = recovered;
+  }
+
   await persistFindingAssociations(input.context, findingDocumentId);
   return findingDocumentId;
 }
@@ -145,4 +160,53 @@ async function persistFindingAssociations(
       [findingDocumentId, association.id, association.type],
     );
   }
+}
+
+async function ensureFleetGraphFindingDocumentType(): Promise<void> {
+  findingDocumentTypeReady ??= pool.query(
+    "ALTER TYPE document_type ADD VALUE IF NOT EXISTS 'fleetgraph_finding'",
+  ).then(() => undefined);
+  return findingDocumentTypeReady;
+}
+
+async function updateExistingFleetGraphFinding(input: {
+  workspaceId: string;
+  key: string;
+  title: string;
+  properties: string;
+}): Promise<string | null> {
+  const result = await pool.query<{ id: string }>(
+    `UPDATE documents
+     SET title = $3,
+         properties = documents.properties
+           || jsonb_build_object(
+             'summary', $4::jsonb->>'summary',
+             'rationale', $4::jsonb->>'rationale',
+             'run_id', $4::jsonb->'run_id',
+             'evidence', $4::jsonb->'evidence',
+             'last_observed_at', $4::jsonb->>'last_observed_at'
+           ),
+         updated_at = now()
+     WHERE id = (
+       SELECT id
+       FROM documents
+       WHERE workspace_id = $1
+         AND document_type::text = 'fleetgraph_finding'
+         AND properties->>'fleetgraph_key' = $2
+         AND deleted_at IS NULL
+       ORDER BY created_at ASC
+       LIMIT 1
+     )
+     RETURNING id`,
+    [input.workspaceId, input.key, input.title, input.properties],
+  );
+
+  return result.rows[0]?.id ?? null;
+}
+
+function isUniqueViolation(error: unknown): boolean {
+  return typeof error === 'object'
+    && error !== null
+    && 'code' in error
+    && (error as { code?: unknown }).code === '23505';
 }
