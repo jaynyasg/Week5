@@ -678,9 +678,7 @@ Synthesized from the focused design review. Each task derives from a specific fi
 
 ## Ship Reference Points
 
-Reference repo:
 
-`C:\Users\jaynyasg\OneDrive\Documents\GitLab\ship`
 
 Reference commit:
 
@@ -700,15 +698,6 @@ Important files:
 - `web/src/hooks/useRealtimeEvents.tsx`
 - `web/src/pages/App.tsx`
 
-## GSTACK REVIEW REPORT
-
-| Review | Trigger | Why | Runs | Status | Findings |
-|--------|---------|-----|------|--------|----------|
-| CEO Review | `/plan-ceo-review` | Scope and strategy | 0 | Not run | Not requested |
-| Codex Review | `/codex review` | Independent second opinion | 0 | Not run | Not requested |
-| Eng Review | `/plan-eng-review` | Architecture and tests | 1 | Clear | Durable findings, hybrid trigger model, graph persistence, UI integration, actor model, document relationships |
-| Design Review | `/plan-design-review` | UI and UX gaps | 1 | Focused pass | Score: 4/10 to 8/10, 5 implementation tasks added |
-| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | Not run | Not requested |
 
 - **UNRESOLVED:** visual mockups were not generated because the gstack designer binary is not available in this environment.
 - **VERDICT:** ENG CLEARED + DESIGN FOCUSED PASS IMPLEMENTED. Local MVP evidence, shared LangSmith traces, public deployment, and public timed latency verification are complete.
