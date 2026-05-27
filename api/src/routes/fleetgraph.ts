@@ -1,6 +1,5 @@
 import { randomUUID } from 'crypto';
 import { Router, Request, Response, NextFunction } from 'express';
-import type { PoolClient } from 'pg';
 import { z } from 'zod';
 import type {
   FleetGraphActionProposal,
@@ -25,10 +24,6 @@ const uuidSchema = z.string().uuid();
 const FLEETGRAPH_FINDINGS_STATEMENT_TIMEOUT_MS = readPositiveInteger(
   process.env.SHIP_FLEETGRAPH_FINDINGS_STATEMENT_TIMEOUT_MS,
   5_000,
-);
-const FLEETGRAPH_FINDINGS_LOCK_TIMEOUT_MS = readPositiveInteger(
-  process.env.SHIP_FLEETGRAPH_FINDINGS_LOCK_TIMEOUT_MS,
-  2_000,
 );
 
 const chatSchema = z.object({
@@ -498,8 +493,8 @@ async function queryVisibleFindingRows(input: {
     ? [input.workspaceId, input.userId, input.contextIds]
     : [input.workspaceId, input.userId];
 
-  return withFleetGraphFindingsTimeout(async (client) => {
-    const result = await client.query<FindingDeliveryRow>(
+  const result = await withFleetGraphFindingsTimeout(
+    pool.query<FindingDeliveryRow>(
       `SELECT fd.id as delivery_id,
               fd.status as delivery_status,
               fd.delivered_at,
@@ -512,62 +507,43 @@ async function queryVisibleFindingRows(input: {
               d.created_at,
               d.updated_at
        FROM fleetgraph_deliveries fd
-       JOIN LATERAL (
-         SELECT d.id, d.title, d.properties, d.created_at, d.updated_at
-         FROM documents d
-         WHERE d.id = fd.finding_document_id
-           AND d.document_type = 'fleetgraph_finding'
-           ${contextFilter}
-       ) d ON true
+       JOIN documents d ON d.id = fd.finding_document_id
        WHERE fd.workspace_id = $1
          AND fd.user_id = $2
+         AND d.document_type = 'fleetgraph_finding'
+         ${contextFilter}
        ORDER BY fd.delivered_at DESC
        LIMIT 50`,
       params,
-    );
-    return result.rows;
+    ),
+  );
+  return result.rows;
+}
+
+async function withFleetGraphFindingsTimeout<T>(query: Promise<T>): Promise<T> {
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  const timeout = new Promise<T>((_, reject) => {
+    timeoutId = setTimeout(() => {
+      reject(new FleetGraphFindingsTimeoutError());
+    }, FLEETGRAPH_FINDINGS_STATEMENT_TIMEOUT_MS);
   });
-}
 
-async function withFleetGraphFindingsTimeout<T>(
-  query: (client: PoolClient) => Promise<T>,
-): Promise<T> {
-  const client = await pool.connect();
   try {
-    await client.query('BEGIN');
-    await client.query(
-      `SELECT set_config('statement_timeout', $1, true),
-              set_config('lock_timeout', $2, true)`,
-      [
-        `${FLEETGRAPH_FINDINGS_STATEMENT_TIMEOUT_MS}ms`,
-        `${FLEETGRAPH_FINDINGS_LOCK_TIMEOUT_MS}ms`,
-      ],
-    );
-    const result = await query(client);
-    await client.query('COMMIT');
-    return result;
-  } catch (error) {
-    await rollbackQuietly(client);
-    throw error;
+    return await Promise.race([query, timeout]);
   } finally {
-    client.release();
-  }
-}
-
-async function rollbackQuietly(client: PoolClient): Promise<void> {
-  try {
-    await client.query('ROLLBACK');
-  } catch {
-    // The original database error is more useful than a rollback cleanup error.
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
 function isDatabaseTimeoutError(error: unknown): boolean {
   return Boolean(
-    error
-      && typeof error === 'object'
-      && 'code' in error
-      && (error as { code?: string }).code === '57014',
+    error instanceof FleetGraphFindingsTimeoutError
+      || (
+        error
+        && typeof error === 'object'
+        && 'code' in error
+        && (error as { code?: string }).code === '57014'
+      ),
   );
 }
 
@@ -575,6 +551,13 @@ function readPositiveInteger(value: string | undefined, fallback: number): numbe
   if (!value) return fallback;
   const parsed = Number(value);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
+class FleetGraphFindingsTimeoutError extends Error {
+  constructor() {
+    super('FleetGraph findings query exceeded route timeout');
+    this.name = 'FleetGraphFindingsTimeoutError';
+  }
 }
 
 function emptySourceCounts(): AssistantSourceCounts {
