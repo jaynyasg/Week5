@@ -1,5 +1,6 @@
 import { randomUUID } from 'crypto';
-import { Router, Request, Response } from 'express';
+import { Router, Request, Response, NextFunction } from 'express';
+import type { PoolClient } from 'pg';
 import { z } from 'zod';
 import type {
   FleetGraphActionProposal,
@@ -21,6 +22,14 @@ type RouterType = ReturnType<typeof Router>;
 const router: RouterType = Router();
 
 const uuidSchema = z.string().uuid();
+const FLEETGRAPH_FINDINGS_STATEMENT_TIMEOUT_MS = readPositiveInteger(
+  process.env.SHIP_FLEETGRAPH_FINDINGS_STATEMENT_TIMEOUT_MS,
+  5_000,
+);
+const FLEETGRAPH_FINDINGS_LOCK_TIMEOUT_MS = readPositiveInteger(
+  process.env.SHIP_FLEETGRAPH_FINDINGS_LOCK_TIMEOUT_MS,
+  2_000,
+);
 
 const chatSchema = z.object({
   message: z.string().trim().min(1).max(FLEETGRAPH_LIMITS.maxMessageChars),
@@ -135,7 +144,7 @@ router.post('/chat', authMiddleware, async (req: Request, res: Response) => {
   } satisfies FleetGraphChatResponse);
 });
 
-router.get('/findings', authMiddleware, async (req: Request, res: Response) => {
+router.get('/findings', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
   const parsed = findingsQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: 'Invalid FleetGraph findings context' });
@@ -146,57 +155,36 @@ router.get('/findings', authMiddleware, async (req: Request, res: Response) => {
     parsed.data.documentId,
     parsed.data.projectId,
   ].filter((id, index, ids): id is string => Boolean(id) && ids.indexOf(id) === index);
-  const contextFilter = contextIds.length
-    ? `AND (
-         d.properties->>'target_document_id' = ANY($3::text[])
-         OR EXISTS (
-           SELECT 1
-           FROM document_associations da
-           WHERE da.document_id = d.id
-             AND da.related_id = ANY($3::uuid[])
-         )
-       )`
-    : '';
-  const params = contextIds.length
-    ? [req.workspaceId, req.userId, contextIds]
-    : [req.workspaceId, req.userId];
-
-  const result = await pool.query(
-    `SELECT fd.id as delivery_id,
-            fd.status as delivery_status,
-            fd.delivered_at,
-            fd.read_at,
-            fd.dismissed_at,
-            fd.snoozed_until,
-            d.id,
-            d.title,
-            d.properties,
-            d.created_at,
-            d.updated_at
-     FROM fleetgraph_deliveries fd
-     JOIN documents d ON d.id = fd.finding_document_id
-     WHERE fd.workspace_id = $1
-       AND fd.user_id = $2
-       AND d.document_type = 'fleetgraph_finding'
-       ${contextFilter}
-     ORDER BY fd.delivered_at DESC
-     LIMIT 50`,
-    params,
-  );
-
-  res.json({
-    findings: result.rows.map((row) => findingSummary(row)),
-    deliveries: result.rows.map((row) => ({
-      id: row.delivery_id,
-      findingDocumentId: row.id,
+  try {
+    const rows = await queryVisibleFindingRows({
+      workspaceId: req.workspaceId!,
       userId: req.userId!,
-      status: row.delivery_status,
-      deliveredAt: toIsoString(row.delivered_at),
-      readAt: row.read_at ? toIsoString(row.read_at) : null,
-      dismissedAt: row.dismissed_at ? toIsoString(row.dismissed_at) : null,
-      snoozedUntil: row.snoozed_until ? toIsoString(row.snoozed_until) : null,
-    })),
-  });
+      contextIds,
+    });
+
+    res.json({
+      findings: rows.map((row) => findingSummary(row)),
+      deliveries: rows.map((row) => ({
+        id: row.delivery_id,
+        findingDocumentId: row.id,
+        userId: req.userId!,
+        status: row.delivery_status,
+        deliveredAt: toIsoString(row.delivered_at),
+        readAt: row.read_at ? toIsoString(row.read_at) : null,
+        dismissedAt: row.dismissed_at ? toIsoString(row.dismissed_at) : null,
+        snoozedUntil: row.snoozed_until ? toIsoString(row.snoozed_until) : null,
+      })),
+    });
+  } catch (error) {
+    if (isDatabaseTimeoutError(error)) {
+      res.status(503).json({
+        error: 'FleetGraph findings are temporarily unavailable',
+        code: 'FLEETGRAPH_FINDINGS_TIMEOUT',
+      });
+      return;
+    }
+    next(error);
+  }
 });
 
 router.get('/findings/:id', authMiddleware, async (req: Request, res: Response) => {
@@ -490,6 +478,105 @@ function sourceCounts(evidence: FleetGraphEvidenceRef[]): AssistantSourceCounts 
   return counts;
 }
 
+async function queryVisibleFindingRows(input: {
+  workspaceId: string;
+  userId: string;
+  contextIds: string[];
+}): Promise<FindingDeliveryRow[]> {
+  const contextFilter = input.contextIds.length
+    ? `AND (
+         d.properties->>'target_document_id' = ANY($3::text[])
+         OR EXISTS (
+           SELECT 1
+           FROM document_associations da
+           WHERE da.document_id = d.id
+             AND da.related_id = ANY($3::uuid[])
+         )
+       )`
+    : '';
+  const params = input.contextIds.length
+    ? [input.workspaceId, input.userId, input.contextIds]
+    : [input.workspaceId, input.userId];
+
+  return withFleetGraphFindingsTimeout(async (client) => {
+    const result = await client.query<FindingDeliveryRow>(
+      `SELECT fd.id as delivery_id,
+              fd.status as delivery_status,
+              fd.delivered_at,
+              fd.read_at,
+              fd.dismissed_at,
+              fd.snoozed_until,
+              d.id,
+              d.title,
+              d.properties,
+              d.created_at,
+              d.updated_at
+       FROM fleetgraph_deliveries fd
+       JOIN LATERAL (
+         SELECT d.id, d.title, d.properties, d.created_at, d.updated_at
+         FROM documents d
+         WHERE d.id = fd.finding_document_id
+           AND d.document_type = 'fleetgraph_finding'
+           ${contextFilter}
+       ) d ON true
+       WHERE fd.workspace_id = $1
+         AND fd.user_id = $2
+       ORDER BY fd.delivered_at DESC
+       LIMIT 50`,
+      params,
+    );
+    return result.rows;
+  });
+}
+
+async function withFleetGraphFindingsTimeout<T>(
+  query: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `SELECT set_config('statement_timeout', $1, true),
+              set_config('lock_timeout', $2, true)`,
+      [
+        `${FLEETGRAPH_FINDINGS_STATEMENT_TIMEOUT_MS}ms`,
+        `${FLEETGRAPH_FINDINGS_LOCK_TIMEOUT_MS}ms`,
+      ],
+    );
+    const result = await query(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (error) {
+    await rollbackQuietly(client);
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+async function rollbackQuietly(client: PoolClient): Promise<void> {
+  try {
+    await client.query('ROLLBACK');
+  } catch {
+    // The original database error is more useful than a rollback cleanup error.
+  }
+}
+
+function isDatabaseTimeoutError(error: unknown): boolean {
+  return Boolean(
+    error
+      && typeof error === 'object'
+      && 'code' in error
+      && (error as { code?: string }).code === '57014',
+  );
+}
+
+function readPositiveInteger(value: string | undefined, fallback: number): number {
+  if (!value) return fallback;
+  const parsed = Number(value);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 function emptySourceCounts(): AssistantSourceCounts {
   return {
     documents: 0,
@@ -517,6 +604,15 @@ interface FindingRow {
   properties: Partial<FleetGraphFindingProperties> | null;
   created_at: Date | string;
   updated_at: Date | string;
+}
+
+interface FindingDeliveryRow extends FindingRow {
+  delivery_id: string;
+  delivery_status: 'unread' | 'read' | 'dismissed' | 'snoozed';
+  delivered_at: Date | string;
+  read_at: Date | string | null;
+  dismissed_at: Date | string | null;
+  snoozed_until: Date | string | null;
 }
 
 interface ActionProposalRow {
