@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
   buildFleetGraphIdempotencyKey: vi.fn(() => 'fleetgraph:key'),
-  safeEnqueueFleetGraphEvent: vi.fn(() => Promise.resolve()),
+  safeEnqueueFleetGraphEvent: vi.fn((): Promise<{ id: string } | null> => Promise.resolve({ id: 'event-1' })),
   drainFleetGraphQueue: vi.fn(() => Promise.resolve({ processed: 1, findingsCreated: 1, failures: 0 })),
 }));
 
@@ -45,6 +45,7 @@ describe('FleetGraph route hooks', () => {
         sourceDocumentId: '64ff9a7d-a49e-4600-a74e-b7650d942d16',
       }));
       expect(mocks.drainFleetGraphQueue).toHaveBeenCalledWith(expect.objectContaining({
+        eventId: 'event-1',
         maxJobs: 1,
       }));
     });
@@ -52,6 +53,21 @@ describe('FleetGraph route hooks', () => {
 
   it('does not inline drain when disabled', async () => {
     process.env.SHIP_FLEETGRAPH_INLINE_DRAIN = 'false';
+
+    enqueueFleetGraphDocumentMutation({
+      workspaceId: '4a6fa27d-ef41-4f6e-8a7b-5342a6eab83a',
+      documentId: '64ff9a7d-a49e-4600-a74e-b7650d942d16',
+      sourceEventType: 'document.updated',
+    });
+
+    await vi.waitFor(() => {
+      expect(mocks.safeEnqueueFleetGraphEvent).toHaveBeenCalled();
+    });
+    expect(mocks.drainFleetGraphQueue).not.toHaveBeenCalled();
+  });
+
+  it('does not inline drain when enqueue is deduped or unavailable', async () => {
+    mocks.safeEnqueueFleetGraphEvent.mockResolvedValueOnce(null);
 
     enqueueFleetGraphDocumentMutation({
       workspaceId: '4a6fa27d-ef41-4f6e-8a7b-5342a6eab83a',

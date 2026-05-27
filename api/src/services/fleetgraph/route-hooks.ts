@@ -25,17 +25,18 @@ export function enqueueFleetGraphDocumentMutation(input: {
       sourceDocumentId: input.documentId,
       stateKey: input.stateKey ?? Date.now(),
     }),
-  }).then(() => {
-    kickFleetGraphInlineDrain(input.workspaceId!);
+  }).then((event) => {
+    if (event) kickFleetGraphInlineDrain(input.workspaceId!, event.id);
   });
 }
 
-function kickFleetGraphInlineDrain(workspaceId: string): void {
+function kickFleetGraphInlineDrain(workspaceId: string, eventId: string): void {
   if (process.env.SHIP_FLEETGRAPH_INLINE_DRAIN === 'false') return;
   if (process.env.SHIP_FLEETGRAPH_PROACTIVE_ENABLED === 'false') return;
 
   void drainFleetGraphQueue({
     workerId: `fleetgraph-inline:${workspaceId}:${Date.now()}`,
+    eventId,
     maxJobs: 1,
   }).catch((error) => {
     console.warn('FleetGraph inline drain failed:', error instanceof Error ? error.message : error);

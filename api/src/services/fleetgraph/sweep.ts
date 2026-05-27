@@ -6,6 +6,7 @@ import { persistFleetGraphActionProposal, persistFleetGraphFinding } from './fin
 import { runFleetGraph } from './runner.js';
 import {
   claimNextFleetGraphEvent,
+  claimFleetGraphEventById,
   completeFleetGraphEvent,
   failFleetGraphEvent,
 } from './queue.js';
@@ -18,15 +19,18 @@ import type {
 export async function drainFleetGraphQueue(input: {
   workerId?: string;
   maxJobs?: number;
+  eventId?: string;
 } = {}): Promise<{ processed: number; findingsCreated: number; failures: number }> {
   const workerId = input.workerId ?? `fleetgraph-${randomUUID()}`;
-  const maxJobs = input.maxJobs ?? 10;
+  const maxJobs = input.eventId ? 1 : input.maxJobs ?? 10;
   let processed = 0;
   let findingsCreated = 0;
   let failures = 0;
 
   for (let index = 0; index < maxJobs; index++) {
-    const event = await claimNextFleetGraphEvent({ workerId });
+    const event = input.eventId
+      ? await claimFleetGraphEventById({ eventId: input.eventId, workerId })
+      : await claimNextFleetGraphEvent({ workerId });
     if (!event) break;
     processed++;
 

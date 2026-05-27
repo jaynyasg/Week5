@@ -29,11 +29,14 @@ export async function enqueueFleetGraphEvent(input: {
   return result.rows[0] ? toQueueEvent(result.rows[0]) : null;
 }
 
-export async function safeEnqueueFleetGraphEvent(input: Parameters<typeof enqueueFleetGraphEvent>[0]): Promise<void> {
+export async function safeEnqueueFleetGraphEvent(
+  input: Parameters<typeof enqueueFleetGraphEvent>[0],
+): Promise<FleetGraphQueueEvent | null> {
   try {
-    await enqueueFleetGraphEvent(input);
+    return await enqueueFleetGraphEvent(input);
   } catch (error) {
     console.warn('FleetGraph event could not be enqueued:', error instanceof Error ? error.message : error);
+    return null;
   }
 }
 
@@ -59,6 +62,28 @@ export async function claimNextFleetGraphEvent(input: {
      )
      RETURNING *`,
     [input.workerId, input.now ?? new Date()],
+  );
+
+  return result.rows[0] ? toQueueEvent(result.rows[0]) : null;
+}
+
+export async function claimFleetGraphEventById(input: {
+  eventId: string;
+  workerId: string;
+  now?: Date;
+}): Promise<FleetGraphQueueEvent | null> {
+  const result = await pool.query<QueueRow>(
+    `UPDATE fleetgraph_event_queue
+     SET status = 'processing',
+         locked_at = now(),
+         locked_by = $1,
+         attempt_count = attempt_count + 1,
+         updated_at = now()
+     WHERE id = $2
+       AND status IN ('queued', 'retrying')
+       AND available_at <= $3
+     RETURNING *`,
+    [input.workerId, input.eventId, input.now ?? new Date()],
   );
 
   return result.rows[0] ? toQueueEvent(result.rows[0]) : null;
