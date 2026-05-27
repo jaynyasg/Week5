@@ -1,5 +1,5 @@
 import { randomUUID } from 'crypto';
-import { Router, Request, Response, NextFunction } from 'express';
+import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import type {
   FleetGraphActionProposal,
@@ -139,7 +139,9 @@ router.post('/chat', authMiddleware, async (req: Request, res: Response) => {
   } satisfies FleetGraphChatResponse);
 });
 
-router.get('/findings', authMiddleware, async (req: Request, res: Response, next: NextFunction) => {
+router.get('/findings', authMiddleware, async (req: Request, res: Response) => {
+  res.setHeader('X-FleetGraph-Findings-Guard', 'promise-timeout-v2');
+
   const parsed = findingsQuerySchema.safeParse(req.query);
   if (!parsed.success) {
     res.status(400).json({ error: 'Invalid FleetGraph findings context' });
@@ -178,7 +180,11 @@ router.get('/findings', authMiddleware, async (req: Request, res: Response, next
       });
       return;
     }
-    next(error);
+    res.status(500).json({
+      error: 'FleetGraph findings are temporarily unavailable',
+      code: 'FLEETGRAPH_FINDINGS_ERROR',
+      reason: safeFleetGraphFindingsError(error),
+    });
   }
 });
 
@@ -545,6 +551,15 @@ function isDatabaseTimeoutError(error: unknown): boolean {
         && (error as { code?: string }).code === '57014'
       ),
   );
+}
+
+function safeFleetGraphFindingsError(error: unknown): string {
+  if (!error || typeof error !== 'object') return 'unknown';
+  const code = 'code' in error && typeof (error as { code?: unknown }).code === 'string'
+    ? (error as { code: string }).code
+    : null;
+  const name = error instanceof Error ? error.name : 'Error';
+  return code ? `${name}:${code}` : name;
 }
 
 function readPositiveInteger(value: string | undefined, fallback: number): number {
