@@ -59,8 +59,15 @@ const decisionSchema = z.object({
   note: z.string().trim().max(1000).optional(),
 });
 
-router.get('/status', authMiddleware, async (_req: Request, res: Response) => {
-  res.json(getFleetGraphStatus());
+router.get('/status', authMiddleware, async (req: Request, res: Response) => {
+  res.json({
+    ...getFleetGraphStatus(),
+    runtime: {
+      inlineDrain: 'targeted-event-v1',
+      findingPersistence: 'self-healing-v1',
+    },
+    queue: await getFleetGraphQueueStatus(req.workspaceId!),
+  });
 });
 
 router.post('/chat', authMiddleware, async (req: Request, res: Response) => {
@@ -560,6 +567,70 @@ function safeFleetGraphFindingsError(error: unknown): string {
     : null;
   const name = error instanceof Error ? error.name : 'Error';
   return code ? `${name}:${code}` : name;
+}
+
+async function getFleetGraphQueueStatus(workspaceId: string): Promise<{
+  counts: Record<string, number>;
+  recentEvents: Array<{
+    id: string;
+    sourceEventType: string;
+    sourceDocumentId: string | null;
+    status: string;
+    attemptCount: number;
+    lastError: string | null;
+    createdAt: string;
+    updatedAt: string;
+  }>;
+} | { unavailable: true; reason: string }> {
+  try {
+    const [countResult, recentResult] = await Promise.all([
+      pool.query<{ status: string; count: string }>(
+        `SELECT status, COUNT(*)::text AS count
+         FROM fleetgraph_event_queue
+         WHERE workspace_id = $1
+         GROUP BY status`,
+        [workspaceId],
+      ),
+      pool.query<{
+        id: string;
+        source_event_type: string;
+        source_document_id: string | null;
+        status: string;
+        attempt_count: number;
+        last_error: string | null;
+        created_at: Date | string;
+        updated_at: Date | string;
+      }>(
+        `SELECT id, source_event_type, source_document_id, status, attempt_count, last_error, created_at, updated_at
+         FROM fleetgraph_event_queue
+         WHERE workspace_id = $1
+         ORDER BY created_at DESC
+         LIMIT 10`,
+        [workspaceId],
+      ),
+    ]);
+
+    return {
+      counts: Object.fromEntries(
+        countResult.rows.map((row) => [row.status, Number(row.count)]),
+      ),
+      recentEvents: recentResult.rows.map((row) => ({
+        id: row.id,
+        sourceEventType: row.source_event_type,
+        sourceDocumentId: row.source_document_id,
+        status: row.status,
+        attemptCount: Number(row.attempt_count),
+        lastError: row.last_error ? row.last_error.slice(0, 300) : null,
+        createdAt: toIsoString(row.created_at),
+        updatedAt: toIsoString(row.updated_at),
+      })),
+    };
+  } catch (error) {
+    return {
+      unavailable: true,
+      reason: safeFleetGraphFindingsError(error),
+    };
+  }
 }
 
 function readPositiveInteger(value: string | undefined, fallback: number): number {
