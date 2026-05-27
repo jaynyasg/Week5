@@ -1,4 +1,4 @@
-import { FormEvent, useState } from 'react';
+import { FormEvent, KeyboardEvent, useState } from 'react';
 
 interface FleetGraphComposerProps {
   disabled: boolean;
@@ -18,12 +18,23 @@ export function FleetGraphComposer({ disabled, maxLength = 4000, findingId, onSe
     setValue('');
   };
 
+  const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      const trimmed = value.trim();
+      if (!trimmed || disabled) return;
+      onSend(trimmed, findingId);
+      setValue('');
+    }
+  };
+
   return (
     <form onSubmit={handleSubmit} className="shrink-0 border-t border-border p-3">
       <div className="flex items-end gap-2 rounded-lg border border-border bg-background p-2 focus-within:border-accent">
         <textarea
           value={value}
           onChange={(event) => setValue(event.target.value)}
+          onKeyDown={handleKeyDown}
           disabled={disabled}
           maxLength={maxLength}
           rows={2}
