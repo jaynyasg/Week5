@@ -133,5 +133,5 @@ function isAlreadyExistsError(error: unknown): boolean {
     ? String((error as { code?: unknown }).code)
     : '';
   const message = error instanceof Error ? error.message : String(error);
-  return code === '42P07' || code === '42710' || message.includes('already exists');
+  return ['42P06', '42P07', '42701', '42710'].includes(code) || message.includes('already exists');
 }
