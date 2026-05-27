@@ -581,15 +581,17 @@ Assumptions:
 
 The current public Render URL from the Ship submission docs is `https://ship-wf2i.onrender.com`.
 
-Public checks run on 2026-05-26:
+Public checks run on 2026-05-27 after the Render deployment of the current FleetGraph build:
 
 | Check | Result |
 |---|---|
 | `GET /health` | `200`, body `{"status":"ok"}` |
-| `GET /api/fleetgraph/status` | Public host responded with `Cannot GET /api/fleetgraph/status`, indicating the deployed service is serving an older build without FleetGraph routes |
-| Browser/app shell | Public host returned the Ship app shell with `200`, but FleetGraph UI strings were not present in the served bundle |
+| `GET /api/fleetgraph/status` | `200`; `enabled: true`, `available: true`, provider `openai`, model `gpt-4o-mini`, proactive enabled, LangSmith tracing enabled, runtime marker `targeted-event-v1` / `self-healing-v1` |
+| `GET /api/fleetgraph/findings` | `200`; delivered findings returned for the authenticated user |
+| Public timed latency run | Real Ship sprint document `146712c1-ac7b-4569-81cf-b459b1fbbdc0` was created at `2026-05-27T03:47:01.2066111Z`; FleetGraph surfaced finding `31c7618c-47e6-4c4e-8395-862ffe4ad3f6` on the first poll at 15.3 seconds |
+| Deployed run metadata | Run `2fadd444-48ff-4515-8e0d-47d56c9788ff` completed as proactive `document.created`, provider `openai`, model `gpt-4o-mini`, 1,050 input tokens, 245 output tokens, estimated cost `$0.000305` |
 
-Render configuration for the current repo includes the FleetGraph web env vars and the `ship-fleetgraph-drain` cron job. The remaining release blocker is deploying the current Week5 code to Render or another public host, then re-running `/health`, `/api/fleetgraph/status`, the FleetGraph drawer, the drain cron, and the timed event-to-finding check against that public environment.
+Render configuration includes the FleetGraph web env vars and the `ship-fleetgraph-drain` cron job. Public health, authenticated FleetGraph status, findings retrieval, proactive event-to-finding delivery, and deployed run cost metadata are verified on the Render URL.
 
 ## Test Plan
 
@@ -610,7 +612,7 @@ Required implementation tests:
 
 ### Current Implementation Validation
 
-Last checked: 2026-05-26.
+Last checked: 2026-05-27.
 
 Passing local checks:
 
@@ -640,12 +642,14 @@ Current deterministic evidence:
 - `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus the no-finding branch: week planning gap, project churn/stalled issues, stale engineer issue, approved-plan-change HITL, missing ownership, context chat, and no-finding.
 - DB-backed validation completed against isolated Docker Postgres on 2026-05-26: `pnpm --filter @ship/api test:fleetgraph-api` passed 22 tests, and the focused FleetGraph OpenAPI/route run passed 17 tests.
 - FleetGraph E2E completed on 2026-05-26 with `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1`: 2 passed, including the timed event-to-finding path under the 5 minute requirement.
+- Public Render latency verification completed on 2026-05-27: real Ship sprint `146712c1-ac7b-4569-81cf-b459b1fbbdc0` produced delivered planning-gap finding `31c7618c-47e6-4c4e-8395-862ffe4ad3f6` in 15.3 seconds, with deployed run `2fadd444-48ff-4515-8e0d-47d56c9788ff` recording proactive mode, trigger `document.created`, token counts, and estimated cost.
 
 Public deployment status:
 
 - Local and LangSmith evidence is complete for the MVP graph paths.
-- Public deployment is the remaining blocker: the known Render URL is live, but it is serving an older build without FleetGraph routes.
-- After deploying the current Week5 branch, regenerate deployed billable cost rows from deployed `fleetgraph_runs` and re-run the public event-to-finding latency check.
+- Public deployment is live at `https://ship-wf2i.onrender.com` with FleetGraph routes present and authenticated.
+- Public event-to-finding latency is verified under the 5 minute requirement.
+- Deployed billable cost metadata is recorded in `fleetgraph_runs` for the public proactive run.
 
 ## Completed Implementation Tasks
 
@@ -707,4 +711,4 @@ Important files:
 | DX Review | `/plan-devex-review` | Developer experience gaps | 0 | Not run | Not requested |
 
 - **UNRESOLVED:** visual mockups were not generated because the gstack designer binary is not available in this environment.
-- **VERDICT:** ENG CLEARED + DESIGN FOCUSED PASS IMPLEMENTED. Local MVP evidence and shared LangSmith traces are complete; public deployment remains the final release blocker.
+- **VERDICT:** ENG CLEARED + DESIGN FOCUSED PASS IMPLEMENTED. Local MVP evidence, shared LangSmith traces, public deployment, and public timed latency verification are complete.
