@@ -363,7 +363,7 @@ async function getVisibleFinding(
      LEFT JOIN fleetgraph_deliveries fd ON fd.finding_document_id = d.id
      WHERE d.id = $1
        AND d.workspace_id = $2
-       AND d.document_type = 'fleetgraph_finding'
+      AND d.document_type::text = 'fleetgraph_finding'
        AND ($3::boolean OR fd.user_id = $4)
      LIMIT 1`,
     [findingId, workspaceId, admin, userId],
@@ -516,7 +516,7 @@ async function queryVisibleFindingRows(input: {
        JOIN documents d ON d.id = fd.finding_document_id
        WHERE fd.workspace_id = $1
          AND fd.user_id = $2
-         AND d.document_type = 'fleetgraph_finding'
+        AND d.document_type::text = 'fleetgraph_finding'
          ${contextFilter}
        ORDER BY fd.delivered_at DESC
        LIMIT 50`,
