@@ -1,4 +1,5 @@
 import { buildFleetGraphIdempotencyKey, safeEnqueueFleetGraphEvent } from './queue.js';
+import { drainFleetGraphQueue } from './sweep.js';
 
 export function enqueueFleetGraphDocumentMutation(input: {
   workspaceId?: string;
@@ -24,5 +25,19 @@ export function enqueueFleetGraphDocumentMutation(input: {
       sourceDocumentId: input.documentId,
       stateKey: input.stateKey ?? Date.now(),
     }),
+  }).then(() => {
+    kickFleetGraphInlineDrain(input.workspaceId!);
+  });
+}
+
+function kickFleetGraphInlineDrain(workspaceId: string): void {
+  if (process.env.SHIP_FLEETGRAPH_INLINE_DRAIN === 'false') return;
+  if (process.env.SHIP_FLEETGRAPH_PROACTIVE_ENABLED === 'false') return;
+
+  void drainFleetGraphQueue({
+    workerId: `fleetgraph-inline:${workspaceId}:${Date.now()}`,
+    maxJobs: 1,
+  }).catch((error) => {
+    console.warn('FleetGraph inline drain failed:', error instanceof Error ? error.message : error);
   });
 }
