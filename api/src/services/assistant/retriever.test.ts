@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { ensureAssistantUploadSchema } from '../../db/assistant-upload-schema.js';
 import { pool } from '../../db/client.js';
 import { generateAssistantEmbedding } from './embeddings.js';
 import { retrieveAssistantSources } from './retriever.js';
@@ -20,6 +21,8 @@ describe('retrieveAssistantSources', () => {
   };
 
   beforeAll(async () => {
+    await ensureAssistantUploadSchema();
+
     const workspaceResult = await pool.query(
       'INSERT INTO workspaces (name) VALUES ($1) RETURNING id',
       [workspaceName],
@@ -276,6 +279,66 @@ describe('retrieveAssistantSources', () => {
     expect(semanticSource).toBeDefined();
     expect(semanticSource?.retrievalStrategy).toBe('semantic');
     expect(semanticSource?.retrievalSignals?.semanticScore).toBeGreaterThan(0.9);
+  });
+
+  it('retrieves indexed FleetGraph findings as Ask Ship document chunks for risk questions', async () => {
+    const hiddenRiskTerm = `latent-vector-risk-${uniqueTerm}`;
+    const findingResult = await pool.query<{ id: string }>(
+      `INSERT INTO documents (workspace_id, document_type, title, properties, created_by, visibility)
+       VALUES ($1, 'fleetgraph_finding', $2, $3, $4, 'workspace')
+       RETURNING id`,
+      [
+        workspaceId,
+        `FleetGraph launch risk ${uniqueTerm}`,
+        JSON.stringify({
+          status: 'open',
+          severity: 'high',
+          kind: 'planning_gap',
+          summary: 'FleetGraph found a launch risk that should be reused by Ask Ship.',
+          target_document_id: projectId,
+          target_document_type: 'project',
+        }),
+        userOneId,
+      ],
+    );
+    const findingId = findingResult.rows[0]!.id;
+
+    await pool.query(
+      `INSERT INTO document_associations (document_id, related_id, relationship_type)
+       VALUES ($1, $2, 'project')`,
+      [findingId, projectId],
+    );
+
+    await pool.query(
+      `INSERT INTO assistant_search_chunks
+        (workspace_id, source_type, source_id, document_id, chunk_index, title, text, metadata)
+       VALUES ($1, 'document', $2, $2, 0, $3, $4, $5)`,
+      [
+        workspaceId,
+        findingId,
+        `FleetGraph launch risk ${uniqueTerm}`,
+        `FleetGraph previous analysis: ${hiddenRiskTerm} is at risk because approval drift changed the week plan after signoff.`,
+        JSON.stringify({ document_type: 'fleetgraph_finding', indexed_for: 'ask_ship' }),
+      ],
+    );
+
+    const sources = await retrieveAssistantSources({
+      userId: userOneId,
+      workspaceId,
+      workspaceRole: 'member',
+      message: `What is at risk with ${hiddenRiskTerm}?`,
+      routeContext: {
+        documentId: projectId,
+        documentType: 'project',
+      },
+      maxSources: 12,
+    });
+
+    const fleetGraphSource = sources.find((source) => source.sourceId === findingId);
+    expect(fleetGraphSource).toBeDefined();
+    expect(fleetGraphSource?.sourceType).toBe('document');
+    expect(fleetGraphSource?.excerpt).toContain(hiddenRiskTerm);
+    expect(fleetGraphSource?.retrievalSignals?.contextBoost).toBeGreaterThanOrEqual(70);
   });
 
   it('keeps full uploaded file chunks so late bullet items remain available to the model', async () => {

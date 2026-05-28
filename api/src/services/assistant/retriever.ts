@@ -31,7 +31,23 @@ interface FileChunkSearchRow {
   context_boost: number;
 }
 
+interface IndexedDocumentChunkSearchRow {
+  source_id: string;
+  document_id: string;
+  document_type: string;
+  title: string;
+  text: string;
+  updated_at: Date | string | null;
+  rank: number | null;
+  semantic_score?: number | null;
+  context_boost: number;
+  fleetgraph_boost: number;
+}
+
+type AssistantQueryEmbedding = Awaited<ReturnType<typeof generateAssistantEmbedding>>;
+
 const WORK_INTENT_PATTERN = /\b(blocked|blocker|blocking|risk|at risk|overdue|timeline|dependency|dependencies|project|projects|issue|issues|week|weeks)\b/i;
+const FLEETGRAPH_RISK_INTENT_PATTERN = /\b(risk|risks|at risk|blocked|blocker|blocking|overdue|stale|approval|ownership|gap|attention|problem|problems)\b/i;
 const FILE_CHUNK_EXCERPT_CHARS = 1400;
 const DOCUMENT_EXCERPT_CHARS = 1400;
 
@@ -76,7 +92,14 @@ export async function retrieveAssistantSources(input: AssistantRetrievalInput): 
   }
 
   sources.push(...await searchFileChunks(input, isAdmin, contextProjectId));
-  sources.push(...await searchSemanticFileChunks(input, isAdmin, contextProjectId));
+  sources.push(...await searchIndexedDocumentChunks(input, isAdmin, contextProjectId));
+
+  const queryEmbedding = await generateQueryEmbedding(input);
+  if (queryEmbedding) {
+    sources.push(...await searchSemanticFileChunks(input, isAdmin, contextProjectId, queryEmbedding));
+    sources.push(...await searchSemanticIndexedDocumentChunks(input, isAdmin, contextProjectId, queryEmbedding));
+  }
+
   sources.push(...await searchDocuments(input, isAdmin, contextProjectId));
 
   return dedupeSources(sources)
@@ -155,15 +178,85 @@ async function searchFileChunks(
   }));
 }
 
-async function searchSemanticFileChunks(
+async function searchIndexedDocumentChunks(
   input: AssistantRetrievalInput,
   isAdmin: boolean,
   contextProjectId: string | null,
 ): Promise<AssistantRetrievedSource[]> {
+  const normalizedQuery = normalizeQuery(input.message);
+  const contextIds = [
+    input.routeContext?.documentId,
+    input.routeContext?.projectId,
+    contextProjectId,
+  ].filter((id): id is string => typeof id === 'string' && id.length > 0);
+  const hasFleetGraphRiskIntent = FLEETGRAPH_RISK_INTENT_PATTERN.test(input.message);
+
+  const result = await pool.query<IndexedDocumentChunkSearchRow>(
+    `WITH query AS (SELECT plainto_tsquery('simple', $4) AS q)
+     SELECT c.source_id,
+            c.document_id AS document_id,
+            d.document_type::text AS document_type,
+            c.title,
+            c.text,
+            c.updated_at,
+            ts_rank_cd(c.search_vector, query.q) AS rank,
+            CASE
+              WHEN d.id = ANY($6::uuid[]) THEN 100
+              WHEN project_da.related_id IS NOT NULL THEN 70
+              ELSE 0
+            END AS context_boost,
+            CASE
+              WHEN d.document_type::text = 'fleetgraph_finding' AND $8::boolean THEN
+                130
+                + CASE d.properties->>'severity'
+                    WHEN 'critical' THEN 45
+                    WHEN 'high' THEN 35
+                    WHEN 'medium' THEN 20
+                    ELSE 10
+                  END
+              ELSE 0
+            END AS fleetgraph_boost
+     FROM assistant_search_chunks c
+     JOIN documents d ON d.id = c.document_id
+     LEFT JOIN document_associations project_da
+       ON project_da.document_id = d.id
+      AND project_da.relationship_type = 'project'
+      AND project_da.related_id = $7::uuid
+     CROSS JOIN query
+     WHERE c.workspace_id = $1
+       AND c.source_type = 'document'
+       AND d.workspace_id = $1
+       AND d.archived_at IS NULL
+       AND d.deleted_at IS NULL
+       AND ${VISIBILITY_FILTER_SQL('d', '$2', '$3')}
+       AND (
+         d.id = ANY($6::uuid[])
+         OR project_da.related_id IS NOT NULL
+         OR c.search_vector @@ query.q
+         OR c.title ILIKE $5
+         OR c.text ILIKE $5
+       )
+     ORDER BY fleetgraph_boost DESC, context_boost DESC, rank DESC NULLS LAST, c.updated_at DESC
+     LIMIT 10`,
+    [
+      input.workspaceId,
+      input.userId,
+      isAdmin,
+      normalizedQuery,
+      `%${normalizedQuery}%`,
+      contextIds,
+      contextProjectId,
+      hasFleetGraphRiskIntent,
+    ],
+  );
+
+  return result.rows.map((row) => indexedDocumentChunkRowToSource(row, 'lexical'));
+}
+
+async function generateQueryEmbedding(input: AssistantRetrievalInput): Promise<AssistantQueryEmbedding> {
   const startedAt = Date.now();
-  let embedding;
   try {
-    embedding = await generateAssistantEmbedding(input.message);
+    return await generateAssistantEmbedding(input.message);
   } catch (error) {
     await safeRecordAssistantTraceEvent({
       runId: input.runId,
@@ -177,11 +270,17 @@ async function searchSemanticFileChunks(
       },
       error: error instanceof Error ? error.message.slice(0, 500) : 'Query embedding failed',
     });
-    return [];
+    return null;
   }
+}
 
-  if (!embedding) return [];
-
+async function searchSemanticFileChunks(
+  input: AssistantRetrievalInput,
+  isAdmin: boolean,
+  contextProjectId: string | null,
+  embedding: NonNullable<AssistantQueryEmbedding>,
+): Promise<AssistantRetrievedSource[]> {
+  const startedAt = Date.now();
   const contextIds = [
     input.routeContext?.documentId,
     input.routeContext?.projectId,
@@ -258,6 +357,90 @@ async function searchSemanticFileChunks(
         },
       };
     });
+}
+
+async function searchSemanticIndexedDocumentChunks(
+  input: AssistantRetrievalInput,
+  isAdmin: boolean,
+  contextProjectId: string | null,
+  embedding: NonNullable<AssistantQueryEmbedding>,
+): Promise<AssistantRetrievedSource[]> {
+  const startedAt = Date.now();
+  const contextIds = [
+    input.routeContext?.documentId,
+    input.routeContext?.projectId,
+    contextProjectId,
+  ].filter((id): id is string => typeof id === 'string' && id.length > 0);
+  const hasFleetGraphRiskIntent = FLEETGRAPH_RISK_INTENT_PATTERN.test(input.message);
+
+  const result = await pool.query<IndexedDocumentChunkSearchRow>(
+    `SELECT c.source_id,
+            c.document_id AS document_id,
+            d.document_type::text AS document_type,
+            c.title,
+            c.text,
+            c.updated_at,
+            NULL::real AS rank,
+            assistant_cosine_similarity(c.embedding, $4::double precision[]) AS semantic_score,
+            CASE
+              WHEN d.id = ANY($5::uuid[]) THEN 100
+              WHEN project_da.related_id IS NOT NULL THEN 70
+              ELSE 0
+            END AS context_boost,
+            CASE
+              WHEN d.document_type::text = 'fleetgraph_finding' AND $7::boolean THEN
+                130
+                + CASE d.properties->>'severity'
+                    WHEN 'critical' THEN 45
+                    WHEN 'high' THEN 35
+                    WHEN 'medium' THEN 20
+                    ELSE 10
+                  END
+              ELSE 0
+            END AS fleetgraph_boost
+     FROM assistant_search_chunks c
+     JOIN documents d ON d.id = c.document_id
+     LEFT JOIN document_associations project_da
+       ON project_da.document_id = d.id
+      AND project_da.relationship_type = 'project'
+      AND project_da.related_id = $6::uuid
+     WHERE c.workspace_id = $1
+       AND c.source_type = 'document'
+       AND c.embedding IS NOT NULL
+       AND d.workspace_id = $1
+       AND d.archived_at IS NULL
+       AND d.deleted_at IS NULL
+       AND ${VISIBILITY_FILTER_SQL('d', '$2', '$3')}
+     ORDER BY fleetgraph_boost DESC, context_boost DESC, semantic_score DESC NULLS LAST, c.updated_at DESC
+     LIMIT 8`,
+    [
+      input.workspaceId,
+      input.userId,
+      isAdmin,
+      embedding.embedding,
+      contextIds,
+      contextProjectId,
+      hasFleetGraphRiskIntent,
+    ],
+  );
+
+  await safeRecordAssistantTraceEvent({
+    runId: input.runId,
+    workspaceId: input.workspaceId,
+    userId: input.userId,
+    eventType: 'retrieval',
+    eventName: 'semantic_document_chunk_search',
+    durationMs: Date.now() - startedAt,
+    metadata: {
+      resultCount: result.rows.length,
+      model: embedding.model,
+      dimensions: embedding.dimensions,
+    },
+  });
+
+  return result.rows
+    .filter((row) => Number(row.semantic_score ?? 0) > 0.08 || row.context_boost > 0 || row.fleetgraph_boost > 0)
+    .map((row) => indexedDocumentChunkRowToSource(row, 'semantic'));
 }
 
 async function searchDocuments(
@@ -417,6 +600,34 @@ async function buildProjectTimelineSource(input: {
     excerpt,
     score: input.score + timeline.summary.blocked_count * 12 + timeline.summary.at_risk_count * 8 + timeline.summary.overdue_count * 6,
     retrievalStrategy: 'structured',
+  };
+}
+
+function indexedDocumentChunkRowToSource(
+  row: IndexedDocumentChunkSearchRow,
+  strategy: 'lexical' | 'semantic',
+): AssistantRetrievedSource {
+  const semanticScore = Number(row.semantic_score ?? 0);
+  const lexicalScore = Number(row.rank ?? 0);
+  const recency = recencyScore(row.updated_at);
+
+  return {
+    sourceType: documentTypeToSourceType(row.document_type),
+    sourceId: row.document_id,
+    title: row.title,
+    url: `/documents/${row.document_id}`,
+    excerpt: clampText(row.text, DOCUMENT_EXCERPT_CHARS),
+    score: (row.context_boost ?? 0)
+      + (row.fleetgraph_boost ?? 0)
+      + (strategy === 'semantic' ? semanticScore * 180 : lexicalScore * 100)
+      + recency,
+    retrievalStrategy: strategy,
+    retrievalSignals: {
+      lexicalScore: strategy === 'lexical' ? lexicalScore : undefined,
+      semanticScore: strategy === 'semantic' ? semanticScore : undefined,
+      contextBoost: row.context_boost ?? 0,
+      recencyScore: recency,
+    },
   };
 }
 

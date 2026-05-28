@@ -1,4 +1,5 @@
 import { createHash } from 'crypto';
+import { ensureAssistantUploadSchema } from '../../db/assistant-upload-schema.js';
 import { pool } from '../../db/client.js';
 import { invalidateDocumentCache } from '../../collaboration/index.js';
 import { ASSISTANT_LIMITS } from './config.js';
@@ -14,6 +15,15 @@ interface FileRow {
   filename: string;
   mime_type: string;
   size_bytes: string | number;
+}
+
+interface FleetGraphFindingRow {
+  id: string;
+  workspace_id: string;
+  title: string;
+  properties: Record<string, unknown> | null;
+  created_at: Date | string | null;
+  updated_at: Date | string | null;
 }
 
 export async function indexUploadedFileForAssistant(input: {
@@ -124,6 +134,83 @@ export async function indexUploadedFileForAssistant(input: {
   }
 }
 
+export async function indexFleetGraphFindingForAssistant(input: {
+  findingDocumentId: string;
+  workspaceId: string;
+  userId?: string | null;
+}): Promise<void> {
+  await ensureAssistantUploadSchema();
+
+  const finding = await getFleetGraphFinding(input.findingDocumentId, input.workspaceId);
+  if (!finding) {
+    await deleteDocumentChunks(input.findingDocumentId, input.workspaceId);
+    return;
+  }
+
+  const text = normalizeText(buildFleetGraphFindingIndexText(finding));
+  if (!text) {
+    await deleteDocumentChunks(finding.id, finding.workspace_id);
+    return;
+  }
+
+  const chunks = chunkText(text);
+  const contentHash = createHash('sha256').update(text).digest('hex');
+  const chunkEmbeddings = await embedFleetGraphFindingChunks({
+    finding,
+    chunks,
+    userId: input.userId ?? null,
+  });
+
+  await deleteDocumentChunks(finding.id, finding.workspace_id);
+  for (const [index, chunk] of chunks.entries()) {
+    const embedding = chunkEmbeddings[index] ?? null;
+    await pool.query(
+      `INSERT INTO assistant_search_chunks
+        (workspace_id, source_type, source_id, document_id, chunk_index, title, text, metadata,
+         embedding, embedding_model, embedding_dimensions, embedding_created_at)
+       VALUES ($1, 'document', $2, $2, $3, $4, $5, $6, $7, $8, $9, CASE WHEN $7::double precision[] IS NULL THEN NULL ELSE now() END)
+       ON CONFLICT (workspace_id, source_type, source_id, chunk_index)
+       DO UPDATE SET
+         document_id = EXCLUDED.document_id,
+         title = EXCLUDED.title,
+         text = EXCLUDED.text,
+         metadata = EXCLUDED.metadata,
+         embedding = EXCLUDED.embedding,
+         embedding_model = EXCLUDED.embedding_model,
+         embedding_dimensions = EXCLUDED.embedding_dimensions,
+         embedding_created_at = EXCLUDED.embedding_created_at,
+         updated_at = now()`,
+      [
+        finding.workspace_id,
+        finding.id,
+        index,
+        finding.title,
+        chunk,
+        JSON.stringify({
+          document_type: 'fleetgraph_finding',
+          indexed_for: 'ask_ship',
+          content_hash: contentHash,
+        }),
+        embedding?.embedding ?? null,
+        embedding?.model ?? null,
+        embedding?.dimensions ?? null,
+      ],
+    );
+  }
+
+  await safeRecordAssistantTraceEvent({
+    workspaceId: finding.workspace_id,
+    userId: input.userId ?? null,
+    eventType: 'embedding',
+    eventName: 'fleetgraph_finding_indexed',
+    documentId: finding.id,
+    metadata: {
+      chunkCount: chunks.length,
+      embeddedCount: chunkEmbeddings.filter(Boolean).length,
+    },
+  });
+}
+
 async function updateAssistantUploadDocumentContent(file: FileRow, chunks: string[]): Promise<void> {
   if (!file.document_id || chunks.length === 0) return;
 
@@ -203,6 +290,24 @@ async function getFile(fileId: string, workspaceId: string): Promise<FileRow | n
   return result.rows[0] ?? null;
 }
 
+async function getFleetGraphFinding(
+  findingDocumentId: string,
+  workspaceId: string,
+): Promise<FleetGraphFindingRow | null> {
+  const result = await pool.query<FleetGraphFindingRow>(
+    `SELECT id, workspace_id, title, properties, created_at, updated_at
+     FROM documents
+     WHERE id = $1
+       AND workspace_id = $2
+       AND document_type::text = 'fleetgraph_finding'
+       AND archived_at IS NULL
+       AND deleted_at IS NULL`,
+    [findingDocumentId, workspaceId],
+  );
+
+  return result.rows[0] ?? null;
+}
+
 async function embedChunks(file: FileRow, chunks: string[]) {
   const results: Array<Awaited<ReturnType<typeof generateAssistantEmbedding>> | null> = [];
   const startedAt = Date.now();
@@ -256,11 +361,55 @@ async function embedChunks(file: FileRow, chunks: string[]) {
   return results;
 }
 
+async function embedFleetGraphFindingChunks(input: {
+  finding: FleetGraphFindingRow;
+  chunks: string[];
+  userId: string | null;
+}) {
+  const results: Array<Awaited<ReturnType<typeof generateAssistantEmbedding>> | null> = [];
+  const startedAt = Date.now();
+  let embeddedCount = 0;
+
+  for (const chunk of input.chunks) {
+    try {
+      const embedding = await generateAssistantEmbedding(`${input.finding.title}\n\n${chunk}`);
+      results.push(embedding);
+      if (embedding) embeddedCount++;
+    } catch (error) {
+      await safeRecordAssistantTraceEvent({
+        workspaceId: input.finding.workspace_id,
+        userId: input.userId,
+        eventType: 'embedding',
+        eventName: 'fleetgraph_finding_embedding_failed',
+        documentId: input.finding.id,
+        durationMs: Date.now() - startedAt,
+        metadata: {
+          providerError: error instanceof AssistantEmbeddingError,
+          completedChunks: embeddedCount,
+          totalChunks: input.chunks.length,
+        },
+        error: error instanceof Error ? error.message.slice(0, 500) : 'FleetGraph finding embedding failed',
+      });
+      return results;
+    }
+  }
+
+  return results;
+}
+
 async function deleteFileChunks(fileId: string, workspaceId: string): Promise<void> {
   await pool.query(
     `DELETE FROM assistant_search_chunks
      WHERE workspace_id = $1 AND source_type = 'file' AND source_id = $2`,
     [workspaceId, fileId],
+  );
+}
+
+async function deleteDocumentChunks(documentId: string, workspaceId: string): Promise<void> {
+  await pool.query(
+    `DELETE FROM assistant_search_chunks
+     WHERE workspace_id = $1 AND source_type = 'document' AND source_id = $2`,
+    [workspaceId, documentId],
   );
 }
 
@@ -279,6 +428,58 @@ async function updateIndexStatus(
      WHERE id = $3 AND workspace_id = $4`,
     [status, error, fileId, workspaceId],
   );
+}
+
+function buildFleetGraphFindingIndexText(finding: FleetGraphFindingRow): string {
+  const properties = finding.properties ?? {};
+  const evidence = Array.isArray(properties.evidence) ? properties.evidence : [];
+  const evidenceLines = evidence
+    .map((item, index) => evidenceItemToText(item, index + 1))
+    .filter(Boolean);
+
+  return [
+    'FleetGraph risk analysis.',
+    'Topics: risk, at risk, blocked, overdue, stale work, planning gap, ownership gap, action required.',
+    `Finding title: ${finding.title}`,
+    scalarLine('Status', properties.status),
+    scalarLine('Severity', properties.severity),
+    scalarLine('Kind', properties.kind),
+    scalarLine('Confidence', properties.confidence),
+    scalarLine('Summary', properties.summary),
+    scalarLine('Rationale', properties.rationale),
+    scalarLine('Target document ID', properties.target_document_id),
+    scalarLine('Target document type', properties.target_document_type),
+    scalarLine('Owner user ID', properties.owner_user_id),
+    scalarLine('FleetGraph run ID', properties.run_id),
+    scalarLine('First detected at', properties.first_detected_at ?? finding.created_at),
+    scalarLine('Last observed at', properties.last_observed_at ?? finding.updated_at),
+    evidenceLines.length > 0 ? `Evidence:\n${evidenceLines.join('\n')}` : null,
+  ].filter((line): line is string => Boolean(line)).join('\n');
+}
+
+function evidenceItemToText(item: unknown, index: number): string | null {
+  if (!item || typeof item !== 'object') return null;
+  const evidence = item as Record<string, unknown>;
+  return [
+    `${index}.`,
+    scalarValue(evidence.sourceType),
+    scalarValue(evidence.title),
+    scalarValue(evidence.excerpt),
+    scalarValue(evidence.url),
+  ].filter(Boolean).join(' ');
+}
+
+function scalarLine(label: string, value: unknown): string | null {
+  const scalar = scalarValue(value);
+  return scalar ? `${label}: ${scalar}` : null;
+}
+
+function scalarValue(value: unknown): string | null {
+  if (value === null || value === undefined) return null;
+  if (value instanceof Date) return value.toISOString();
+  if (typeof value === 'string') return value.trim() || null;
+  if (typeof value === 'number' || typeof value === 'boolean') return String(value);
+  return null;
 }
 
 function normalizeText(text: string): string {

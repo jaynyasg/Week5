@@ -595,7 +595,7 @@ Assumptions:
 
 ## Deployment Evidence
 
-The current public Render URL from the Ship submission docs is `https://ship-wf2i.onrender.com`.
+The current public Render URL from the FleetGraph submission docs is `https://ship-wf2i.onrender.com`.
 
 Public checks run on 2026-05-27 after the Render deployment of the current FleetGraph build:
 

@@ -16,6 +16,7 @@ Open these tabs before starting:
 4. LangSmith proactive finding trace: `https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r`
 5. LangSmith HITL/action proposal trace: `https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r`
 6. LangSmith on-demand chat trace: `https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r`
+7. Ask Ship drawer ready with this question: `What's at risk on this project?`
 
 Do not show local login files, session cookies, bearer tokens, or Render environment variables.
 
@@ -121,7 +122,7 @@ Call out:
 
 ---
 
-## 3:10–3:45 — UI, Notifications, and HITL Gate
+## 3:10–3:45 — UI, Ask Ship Retrieval, and HITL Gate
 
 Show the deployed app FleetGraph drawer, or the UI Integration section in `FLEETGRAPH.md`.
 
@@ -129,15 +130,29 @@ Say:
 
 > FleetGraph is embedded in Ship's existing assistant drawer — not a standalone chatbot page. The drawer has a findings inbox, finding detail views, severity-aware toasts for critical and high findings, notification badges, and a human approval gate with approve, reject, snooze, and dismiss controls. All of these work through authenticated API routes. FleetGraph cannot mutate a Ship document without a signed-in user explicitly approving the action.
 
+Then open Ask Ship and ask:
+
+```text
+What's at risk on this project?
+```
+
+Say:
+
+> I also closed a product gap between the two assistant surfaces. FleetGraph findings are no longer siloed in the FleetGraph drawer: new and updated `fleetgraph_finding` documents are indexed into the same Ask Ship retrieval table, and existing findings are backfilled when the assistant schema initializes. That means Ask Ship can reuse FleetGraph's previous analysis and cite a finding when a PM asks what is at risk, instead of rediscovering the same risk from scratch.
+
+Point at:
+- Ask Ship returning a cited answer from FleetGraph evidence, if deployed
+- Or the implementation note: `fleetgraph_finding` documents are indexed into `assistant_search_chunks`
+
 ---
 
-## 3:45–4:00 — Close
+## 3:45–4:05 — Close
 
 Return to the top of `FLEETGRAPH.md`.
 
 Say:
 
-> Early Submission delivers test case evidence for all six use cases with shared trace links, and a documented architecture decisions section covering framework, node design, state management, and deployment. The MVP foundation — deployed graph, real Ship data, proactive detection, HITL gate, embedded chat, and public latency pass — is unchanged and verified.
+> Early Submission delivers test case evidence for all six use cases with shared trace links, and a documented architecture decisions section covering framework, node design, state management, and deployment. The MVP foundation — deployed graph, real Ship data, proactive detection, HITL gate, embedded chat, FleetGraph findings available to Ask Ship retrieval, and public latency pass — is unchanged and verified.
 
 ---
 
@@ -146,6 +161,7 @@ Say:
 - If the deployed app is cold, show the Deployment Evidence table in `FLEETGRAPH.md`.
 - If LangSmith is slow, show the trace IDs and run IDs listed in `FLEETGRAPH.md` → `Observability`.
 - If the FleetGraph drawer has no visible findings, show the delivered finding ID `31c7618c` and the test evidence in `Current Implementation Validation`.
+- If Ask Ship does not cite a FleetGraph finding because the latest deploy has not rolled out, show the implementation summary and continue; do not wait live.
 - If time is running short, cut Section 4 (UI/HITL) — it was shown at MVP. Prioritize Test Cases and Architecture Decisions since those are the new rubric items.
 
 ---
@@ -164,6 +180,7 @@ Say:
 | Proactive detection end-to-end | Deployment Evidence; proactive trace `129c549c` |
 | Different execution paths | Three traces: finding-only, HITL interrupt, on-demand chat |
 | Human-in-the-loop gate | HITL trace `fdca7b9c`; `FLEETGRAPH.md` → `Human-in-the-Loop Experience` |
+| Ask Ship reuses FleetGraph findings | Ask Ship drawer; indexed `fleetgraph_finding` documents in `assistant_search_chunks` |
 | Deployed and publicly accessible | `https://ship-wf2i.onrender.com` |
 | Detection latency under 5 minutes | Public timed run: 15.3 seconds |
 | Real Ship data | All six traces generated from real Ship rows |

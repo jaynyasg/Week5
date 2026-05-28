@@ -1,4 +1,5 @@
 import { pool } from '../../db/client.js';
+import { indexFleetGraphFindingForAssistant } from '../assistant/indexer.js';
 import type {
   FleetGraphActionProposalCandidate,
   FleetGraphContext,
@@ -40,6 +41,7 @@ export async function persistFleetGraphFinding(input: {
   });
   if (updated) {
     await persistFindingAssociations(input.context, updated);
+    await safeIndexFindingForAskShip(updated, input.context);
     return updated;
   }
 
@@ -71,6 +73,7 @@ export async function persistFleetGraphFinding(input: {
   }
 
   await persistFindingAssociations(input.context, findingDocumentId);
+  await safeIndexFindingForAskShip(findingDocumentId, input.context);
   return findingDocumentId;
 }
 
@@ -167,6 +170,21 @@ async function ensureFleetGraphFindingDocumentType(): Promise<void> {
     "ALTER TYPE document_type ADD VALUE IF NOT EXISTS 'fleetgraph_finding'",
   ).then(() => undefined);
   return findingDocumentTypeReady;
+}
+
+async function safeIndexFindingForAskShip(
+  findingDocumentId: string,
+  context: FleetGraphContext,
+): Promise<void> {
+  try {
+    await indexFleetGraphFindingForAssistant({
+      findingDocumentId,
+      workspaceId: context.workspaceId,
+      userId: toNullableUuid(context.userId),
+    });
+  } catch (error) {
+    console.warn('FleetGraph finding Ask Ship indexing failed:', error instanceof Error ? error.message : error);
+  }
 }
 
 async function updateExistingFleetGraphFinding(input: {

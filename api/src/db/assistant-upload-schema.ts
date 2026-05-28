@@ -197,6 +197,7 @@ async function repairAssistantUploadSchema(): Promise<void> {
   `);
 
   await backfillBlankAssistantUploadDocumentBodies();
+  await backfillFleetGraphFindingChunks();
 }
 
 async function backfillBlankAssistantUploadDocumentBodies(): Promise<void> {
@@ -264,5 +265,83 @@ async function backfillBlankAssistantUploadDocumentBodies(): Promise<void> {
         updated_at = now()
     FROM document_content dc
     WHERE d.id = dc.document_id;
+  `);
+}
+
+async function backfillFleetGraphFindingChunks(): Promise<void> {
+  await pool.query(`
+    WITH fleetgraph_findings AS (
+      SELECT d.id,
+             d.workspace_id,
+             d.title,
+             btrim(concat_ws(E'\n',
+               'FleetGraph risk analysis.',
+               'Topics: risk, at risk, blocked, overdue, stale work, planning gap, ownership gap, action required.',
+               'Finding title: ' || d.title,
+               'Status: ' || NULLIF(d.properties->>'status', ''),
+               'Severity: ' || NULLIF(d.properties->>'severity', ''),
+               'Kind: ' || NULLIF(d.properties->>'kind', ''),
+               'Confidence: ' || NULLIF(d.properties->>'confidence', ''),
+               'Summary: ' || NULLIF(d.properties->>'summary', ''),
+               'Rationale: ' || NULLIF(d.properties->>'rationale', ''),
+               'Target document ID: ' || NULLIF(d.properties->>'target_document_id', ''),
+               'Target document type: ' || NULLIF(d.properties->>'target_document_type', ''),
+               'Owner user ID: ' || NULLIF(d.properties->>'owner_user_id', ''),
+               'FleetGraph run ID: ' || NULLIF(d.properties->>'run_id', ''),
+               'First detected at: ' || NULLIF(d.properties->>'first_detected_at', ''),
+               'Last observed at: ' || NULLIF(d.properties->>'last_observed_at', ''),
+               (
+                 SELECT CASE
+                   WHEN COUNT(*) > 0 THEN 'Evidence:' || E'\n' || string_agg(
+                     concat_ws(' ',
+                       evidence.ordinality::text || '.',
+                       evidence.item->>'sourceType',
+                       evidence.item->>'title',
+                       evidence.item->>'excerpt',
+                       evidence.item->>'url'
+                     ),
+                     E'\n'
+                     ORDER BY evidence.ordinality
+                   )
+                   ELSE NULL
+                 END
+                 FROM jsonb_array_elements(
+                   CASE
+                     WHEN jsonb_typeof(COALESCE(d.properties, '{}'::jsonb)->'evidence') = 'array'
+                     THEN COALESCE(d.properties, '{}'::jsonb)->'evidence'
+                     ELSE '[]'::jsonb
+                   END
+                 ) WITH ORDINALITY AS evidence(item, ordinality)
+               )
+             )) AS text
+      FROM documents d
+      WHERE d.document_type::text = 'fleetgraph_finding'
+        AND d.archived_at IS NULL
+        AND d.deleted_at IS NULL
+    )
+    INSERT INTO assistant_search_chunks (
+      workspace_id, source_type, source_id, document_id, chunk_index, title, text, metadata
+    )
+    SELECT workspace_id,
+           'document',
+           id,
+           id,
+           0,
+           title,
+           text,
+           jsonb_build_object(
+             'document_type', 'fleetgraph_finding',
+             'indexed_for', 'ask_ship',
+             'backfilled', true
+           )
+    FROM fleetgraph_findings
+    WHERE text <> ''
+    ON CONFLICT (workspace_id, source_type, source_id, chunk_index)
+    DO UPDATE SET
+      document_id = EXCLUDED.document_id,
+      title = EXCLUDED.title,
+      text = EXCLUDED.text,
+      metadata = assistant_search_chunks.metadata || EXCLUDED.metadata,
+      updated_at = now();
   `);
 }
