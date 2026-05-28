@@ -116,14 +116,19 @@ export function AppLayout() {
       severity?: string;
       title?: string;
       actionRequired?: boolean;
+      toast?: boolean;
+      badge?: boolean;
     };
     const severity = payload.severity ?? 'info';
     const actionRequired = Boolean(payload.actionRequired);
 
-    setFleetGraphUnreadCount((count) => Math.max(1, count + 1));
+    if (payload.badge ?? true) {
+      setFleetGraphUnreadCount((count) => Math.max(1, count + 1));
+    }
     void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findingsRoot });
 
-    if (actionRequired || severity === 'high' || severity === 'critical') {
+    const showFindingToast = payload.toast ?? (actionRequired || severity === 'high' || severity === 'critical');
+    if (showFindingToast) {
       showToast(payload.title ?? 'FleetGraph finding', severity === 'critical' ? 'error' : 'info', 7000, {
         label: 'View',
         onClick: () => {

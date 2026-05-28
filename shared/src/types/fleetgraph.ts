@@ -105,6 +105,23 @@ export interface FleetGraphStatusResponse {
   };
 }
 
+export type FleetGraphToastMinSeverity =
+  | 'off'
+  | FleetGraphFindingSeverity;
+
+export interface FleetGraphNotificationPreferences {
+  toastMinSeverity: FleetGraphToastMinSeverity;
+  toastActionRequired: boolean;
+  showUnreadBadge: boolean;
+  updatedAt: string | null;
+}
+
+export interface FleetGraphNotificationPreferencesUpdateRequest {
+  toastMinSeverity?: FleetGraphToastMinSeverity;
+  toastActionRequired?: boolean;
+  showUnreadBadge?: boolean;
+}
+
 export interface FleetGraphEvidence {
   sourceType: 'document' | 'issue' | 'project' | 'program' | 'week' | 'timeline' | 'file';
   sourceId: string;

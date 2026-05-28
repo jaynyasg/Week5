@@ -15,6 +15,10 @@ import { pool } from '../db/client.js';
 import { getFleetGraphStatus, FLEETGRAPH_LIMITS } from '../services/fleetgraph/config.js';
 import { runFleetGraph } from '../services/fleetgraph/runner.js';
 import { logAuditEvent } from '../services/audit.js';
+import {
+  getFleetGraphNotificationPreferences,
+  upsertFleetGraphNotificationPreferences,
+} from '../services/fleetgraph/notification-preferences.js';
 import type { FleetGraphEvidenceRef } from '../services/fleetgraph/types.js';
 
 type RouterType = ReturnType<typeof Router>;
@@ -46,6 +50,14 @@ const findingsQuerySchema = z.object({
   projectId: z.string().uuid().optional(),
 });
 
+const notificationPreferencesSchema = z.object({
+  toastMinSeverity: z.enum(['off', 'info', 'low', 'medium', 'high', 'critical']).optional(),
+  toastActionRequired: z.boolean().optional(),
+  showUnreadBadge: z.boolean().optional(),
+}).refine((value) => Object.keys(value).length > 0, {
+  message: 'At least one notification preference is required',
+});
+
 const deliveryUpdateSchema = z.object({
   status: z.enum(['read', 'dismissed', 'snoozed']),
   snoozedUntil: z.string().datetime().optional(),
@@ -68,6 +80,31 @@ router.get('/status', authMiddleware, async (req: Request, res: Response) => {
     },
     queue: await getFleetGraphQueueStatus(req.workspaceId!),
   });
+});
+
+router.get('/preferences', authMiddleware, async (req: Request, res: Response) => {
+  const preferences = await getFleetGraphNotificationPreferences({
+    workspaceId: req.workspaceId!,
+    userId: req.userId!,
+  });
+
+  res.json(preferences);
+});
+
+router.patch('/preferences', authMiddleware, async (req: Request, res: Response) => {
+  const parsed = notificationPreferencesSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid FleetGraph notification preferences' });
+    return;
+  }
+
+  const preferences = await upsertFleetGraphNotificationPreferences({
+    workspaceId: req.workspaceId!,
+    userId: req.userId!,
+    updates: parsed.data,
+  });
+
+  res.json(preferences);
 });
 
 router.post('/chat', authMiddleware, async (req: Request, res: Response) => {

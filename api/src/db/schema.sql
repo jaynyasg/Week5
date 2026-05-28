@@ -393,6 +393,18 @@ CREATE TABLE IF NOT EXISTS fleetgraph_deliveries (
   UNIQUE (finding_document_id, user_id)
 );
 
+CREATE TABLE IF NOT EXISTS fleetgraph_notification_preferences (
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  toast_min_severity TEXT NOT NULL DEFAULT 'high'
+    CHECK (toast_min_severity IN ('off', 'info', 'low', 'medium', 'high', 'critical')),
+  toast_action_required BOOLEAN NOT NULL DEFAULT true,
+  show_unread_badge BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  PRIMARY KEY (workspace_id, user_id)
+);
+
 CREATE TABLE IF NOT EXISTS fleetgraph_action_proposals (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -567,6 +579,7 @@ CREATE INDEX IF NOT EXISTS idx_fleetgraph_runs_status ON fleetgraph_runs(workspa
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_deliveries_user_status ON fleetgraph_deliveries(user_id, status, delivered_at DESC);
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_deliveries_finding ON fleetgraph_deliveries(finding_document_id);
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_deliveries_workspace_status ON fleetgraph_deliveries(workspace_id, status, delivered_at DESC);
+CREATE INDEX IF NOT EXISTS idx_fleetgraph_notification_preferences_user ON fleetgraph_notification_preferences(user_id, workspace_id);
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_action_proposals_status ON fleetgraph_action_proposals(workspace_id, status, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_action_proposals_finding_status ON fleetgraph_action_proposals(finding_document_id, status)
   WHERE finding_document_id IS NOT NULL;

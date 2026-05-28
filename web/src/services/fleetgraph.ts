@@ -5,6 +5,8 @@ import type {
   FleetGraphChatResponse,
   FleetGraphFindingDetail,
   FleetGraphFindingsResponse,
+  FleetGraphNotificationPreferences,
+  FleetGraphNotificationPreferencesUpdateRequest,
   FleetGraphRunSummary,
   FleetGraphStatusResponse,
   AssistantRouteContext,
@@ -59,6 +61,24 @@ export async function getFleetGraphRun(id: string): Promise<FleetGraphRunSummary
   const response = await apiGet(`/api/fleetgraph/runs/${id}`);
   if (!response.ok) {
     throw new Error('Failed to load FleetGraph run');
+  }
+  return response.json();
+}
+
+export async function getFleetGraphNotificationPreferences(): Promise<FleetGraphNotificationPreferences> {
+  const response = await apiGet('/api/fleetgraph/preferences');
+  if (!response.ok) {
+    throw new Error('Failed to load FleetGraph notification preferences');
+  }
+  return response.json();
+}
+
+export async function updateFleetGraphNotificationPreferences(
+  preferences: FleetGraphNotificationPreferencesUpdateRequest,
+): Promise<FleetGraphNotificationPreferences> {
+  const response = await apiPatch('/api/fleetgraph/preferences', preferences);
+  if (!response.ok) {
+    throw new Error('Failed to update FleetGraph notification preferences');
   }
   return response.json();
 }

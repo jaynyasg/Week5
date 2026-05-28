@@ -7,11 +7,19 @@ describe('FleetGraph OpenAPI schema', () => {
 
     expect(document.paths['/fleetgraph/status']).toBeDefined();
     expect(document.paths['/fleetgraph/chat']).toBeDefined();
+    expect(document.paths['/fleetgraph/preferences']).toBeDefined();
     expect(document.paths['/fleetgraph/findings']).toBeDefined();
     expect(document.paths['/fleetgraph/findings/{id}']).toBeDefined();
     expect(document.paths['/fleetgraph/deliveries/{id}']).toBeDefined();
     expect(document.paths['/fleetgraph/runs/{id}']).toBeDefined();
     expect(document.paths['/fleetgraph/actions/{id}/decision']).toBeDefined();
+  });
+
+  it('documents user notification preferences', () => {
+    const document = generateOpenAPIDocument();
+
+    expect(document.paths['/fleetgraph/preferences']?.get).toBeDefined();
+    expect(document.paths['/fleetgraph/preferences']?.patch).toBeDefined();
   });
 
   it('documents route-context filters for delivered findings', () => {

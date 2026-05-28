@@ -179,4 +179,6 @@ export interface FleetGraphDeliveryPayload {
   title: string;
   targetLabel: string | null;
   actionRequired: boolean;
+  toast: boolean;
+  badge: boolean;
 }

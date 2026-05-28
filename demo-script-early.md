@@ -122,13 +122,18 @@ Call out:
 
 ---
 
-## 3:10–3:45 — UI, Ask Ship Retrieval, and HITL Gate
+## 3:10–3:45 — UI, Ask Ship Retrieval, Notification Rules, and HITL Gate
 
 Show the deployed app FleetGraph drawer, or the UI Integration section in `FLEETGRAPH.md`.
 
 Say:
 
-> FleetGraph is embedded in Ship's existing assistant drawer — not a standalone chatbot page. The drawer has a findings inbox, finding detail views, severity-aware toasts for critical and high findings, notification badges, and a human approval gate with approve, reject, snooze, and dismiss controls. All of these work through authenticated API routes. FleetGraph cannot mutate a Ship document without a signed-in user explicitly approving the action.
+> FleetGraph is embedded in Ship's existing assistant drawer — not a standalone chatbot page. The drawer has a findings inbox, finding detail views, notification badges, and a human approval gate with approve, reject, snooze, and dismiss controls. Notifications are now user-configurable: each signed-in user can choose the toast severity threshold, whether action-required findings always toast, and whether unread badge counts appear. The old hardcoded critical/high toast rule is now just the default preference, not the only team policy. FleetGraph cannot mutate a Ship document without a signed-in user explicitly approving the action.
+
+Point at:
+- FleetGraph notification controls: toast threshold, action-required toast toggle, unread badge toggle
+- The unread badge in the assistant tab
+- The human approval controls in a finding detail
 
 Then open Ask Ship and ask:
 
@@ -181,6 +186,7 @@ Say:
 | Different execution paths | Three traces: finding-only, HITL interrupt, on-demand chat |
 | Human-in-the-loop gate | HITL trace `fdca7b9c`; `FLEETGRAPH.md` → `Human-in-the-Loop Experience` |
 | Ask Ship reuses FleetGraph findings | Ask Ship drawer; indexed `fleetgraph_finding` documents in `assistant_search_chunks` |
+| User-configurable FleetGraph notification rules | FleetGraph drawer notification controls; `/api/fleetgraph/preferences` |
 | Deployed and publicly accessible | `https://ship-wf2i.onrender.com` |
 | Detection latency under 5 minutes | Public timed run: 15.3 seconds |
 | Real Ship data | All six traces generated from real Ship rows |

@@ -70,6 +70,25 @@ describe('FleetGraphPanel', () => {
     });
   });
 
+  it('updates notification rules from the panel controls', () => {
+    const updateNotificationPreferences = vi.fn();
+    useFleetGraphMock.mockReturnValue(fleetGraphState({
+      updateNotificationPreferences,
+    }));
+
+    render(<FleetGraphPanel />);
+
+    fireEvent.change(screen.getByLabelText('FleetGraph toast threshold'), {
+      target: { value: 'medium' },
+    });
+    fireEvent.click(screen.getByLabelText('Toast action-required findings'));
+    fireEvent.click(screen.getByLabelText('Show unread badge'));
+
+    expect(updateNotificationPreferences).toHaveBeenCalledWith({ toastMinSeverity: 'medium' });
+    expect(updateNotificationPreferences).toHaveBeenCalledWith({ toastActionRequired: false });
+    expect(updateNotificationPreferences).toHaveBeenCalledWith({ showUnreadBadge: false });
+  });
+
   it('renders empty, error, and unavailable inbox states', () => {
     useFleetGraphMock.mockReturnValue(fleetGraphState({
       findingsLoading: true,
@@ -242,6 +261,14 @@ function fleetGraphState(overrides: Partial<ReturnType<typeof useFleetGraph>> = 
     selectedFindingLoading: false,
     selectedRun: undefined,
     selectedRunLoading: false,
+    notificationPreferences: {
+      toastMinSeverity: 'high',
+      toastActionRequired: true,
+      showUnreadBadge: true,
+      updatedAt: null,
+    },
+    notificationPreferencesLoading: false,
+    notificationPreferencesError: null,
     messages: [],
     send: vi.fn(),
     sending: false,
@@ -253,6 +280,9 @@ function fleetGraphState(overrides: Partial<ReturnType<typeof useFleetGraph>> = 
     decideAction: vi.fn(),
     decidingAction: false,
     decisionError: null,
+    updateNotificationPreferences: vi.fn(),
+    updatingNotificationPreferences: false,
+    notificationPreferencesUpdateError: null,
     refresh: vi.fn(),
     reset: vi.fn(),
     ...overrides,

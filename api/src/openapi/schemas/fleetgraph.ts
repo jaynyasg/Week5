@@ -15,6 +15,8 @@ const FleetGraphFindingKindSchema = z.enum([
   'other',
 ]).openapi('FleetGraphFindingKind');
 const FleetGraphDeliveryStatusSchema = z.enum(['unread', 'read', 'dismissed', 'snoozed']).openapi('FleetGraphDeliveryStatus');
+const FleetGraphToastMinSeveritySchema = z.enum(['off', 'info', 'low', 'medium', 'high', 'critical'])
+  .openapi('FleetGraphToastMinSeverity');
 const FleetGraphActionProposalStatusSchema = z.enum(['pending', 'approved', 'rejected', 'expired', 'failed'])
   .openapi('FleetGraphActionProposalStatus');
 const FleetGraphActionTypeSchema = z.enum([
@@ -196,6 +198,19 @@ const FleetGraphFindingsResponseSchema = z.object({
   deliveries: z.array(FleetGraphDeliverySchema),
 }).openapi('FleetGraphFindingsResponse');
 
+const FleetGraphNotificationPreferencesSchema = z.object({
+  toastMinSeverity: FleetGraphToastMinSeveritySchema,
+  toastActionRequired: z.boolean(),
+  showUnreadBadge: z.boolean(),
+  updatedAt: z.string().nullable(),
+}).openapi('FleetGraphNotificationPreferences');
+
+const FleetGraphNotificationPreferencesUpdateRequestSchema = z.object({
+  toastMinSeverity: FleetGraphToastMinSeveritySchema.optional(),
+  toastActionRequired: z.boolean().optional(),
+  showUnreadBadge: z.boolean().optional(),
+}).openapi('FleetGraphNotificationPreferencesUpdateRequest');
+
 const FleetGraphRunSummarySchema = z.object({
   id: z.string().uuid(),
   mode: FleetGraphModeSchema,
@@ -236,6 +251,8 @@ registry.register('FleetGraphFindingsQuery', FleetGraphFindingsQuerySchema);
 registry.register('FleetGraphChatResponse', FleetGraphChatResponseSchema);
 registry.register('FleetGraphFindingsResponse', FleetGraphFindingsResponseSchema);
 registry.register('FleetGraphFindingDetail', FleetGraphFindingDetailSchema);
+registry.register('FleetGraphNotificationPreferences', FleetGraphNotificationPreferencesSchema);
+registry.register('FleetGraphNotificationPreferencesUpdateRequest', FleetGraphNotificationPreferencesUpdateRequestSchema);
 registry.register('FleetGraphRunSummary', FleetGraphRunSummarySchema);
 registry.register('FleetGraphDeliveryUpdateRequest', FleetGraphDeliveryUpdateRequestSchema);
 registry.register('FleetGraphActionDecisionRequest', FleetGraphActionDecisionRequestSchema);
@@ -282,6 +299,42 @@ registry.registerPath({
       description: 'FleetGraph provider or checkpoint configuration is unavailable',
       content: { 'application/json': { schema: FleetGraphChatResponseSchema } },
     },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/fleetgraph/preferences',
+  tags: ['FleetGraph'],
+  summary: 'Get FleetGraph notification preferences',
+  description: 'Returns the current user notification rules for FleetGraph badges and toasts in the active workspace.',
+  responses: {
+    200: {
+      description: 'FleetGraph notification preferences',
+      content: { 'application/json': { schema: FleetGraphNotificationPreferencesSchema } },
+    },
+    401: { description: 'Authentication required' },
+  },
+});
+
+registry.registerPath({
+  method: 'patch',
+  path: '/fleetgraph/preferences',
+  tags: ['FleetGraph'],
+  summary: 'Update FleetGraph notification preferences',
+  description: 'Updates the current user notification rules for FleetGraph badges and toasts in the active workspace.',
+  request: {
+    body: {
+      content: { 'application/json': { schema: FleetGraphNotificationPreferencesUpdateRequestSchema } },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Updated FleetGraph notification preferences',
+      content: { 'application/json': { schema: FleetGraphNotificationPreferencesSchema } },
+    },
+    400: { description: 'Invalid notification preference update' },
+    401: { description: 'Authentication required' },
   },
 });
 

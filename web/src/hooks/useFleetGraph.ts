@@ -6,15 +6,18 @@ import type {
   FleetGraphChatRequest,
   FleetGraphChatResponse,
   FleetGraphFindingSummary,
+  FleetGraphNotificationPreferencesUpdateRequest,
 } from '@ship/shared';
 import {
   decideFleetGraphAction,
   getFleetGraphFinding,
   getFleetGraphFindings,
+  getFleetGraphNotificationPreferences,
   getFleetGraphRun,
   getFleetGraphStatus,
   sendFleetGraphMessage,
   updateFleetGraphDelivery,
+  updateFleetGraphNotificationPreferences,
 } from '@/services/fleetgraph';
 
 export const fleetGraphKeys = {
@@ -27,6 +30,7 @@ export const fleetGraphKeys = {
   ] as const,
   finding: (id?: string | null) => ['fleetgraph', 'finding', id] as const,
   run: (id?: string | null) => ['fleetgraph', 'run', id] as const,
+  notificationPreferences: ['fleetgraph', 'notificationPreferences'] as const,
 };
 
 export interface FleetGraphTranscriptMessage {
@@ -67,6 +71,12 @@ export function useFleetGraph(context?: AssistantRouteContext) {
     enabled: Boolean(selectedRunId),
   });
 
+  const notificationPreferencesQuery = useQuery({
+    queryKey: fleetGraphKeys.notificationPreferences,
+    queryFn: getFleetGraphNotificationPreferences,
+    staleTime: 60_000,
+  });
+
   const deliveryByFindingId = useMemo(() => {
     return new Map(
       (findingsQuery.data?.deliveries ?? []).map((delivery) => [delivery.findingDocumentId, delivery]),
@@ -74,8 +84,9 @@ export function useFleetGraph(context?: AssistantRouteContext) {
   }, [findingsQuery.data?.deliveries]);
 
   const unreadCount = useMemo(() => {
+    if (notificationPreferencesQuery.data?.showUnreadBadge === false) return 0;
     return (findingsQuery.data?.deliveries ?? []).filter((delivery) => delivery.status === 'unread').length;
-  }, [findingsQuery.data?.deliveries]);
+  }, [findingsQuery.data?.deliveries, notificationPreferencesQuery.data?.showUnreadBadge]);
 
   const chatMutation = useMutation({
     mutationFn: sendFleetGraphMessage,
@@ -118,6 +129,14 @@ export function useFleetGraph(context?: AssistantRouteContext) {
           createdAt: new Date().toISOString(),
         },
       ]);
+    },
+  });
+
+  const notificationPreferencesMutation = useMutation({
+    mutationFn: (preferences: FleetGraphNotificationPreferencesUpdateRequest) =>
+      updateFleetGraphNotificationPreferences(preferences),
+    onSuccess: (preferences) => {
+      queryClient.setQueryData(fleetGraphKeys.notificationPreferences, preferences);
     },
   });
 
@@ -178,6 +197,9 @@ export function useFleetGraph(context?: AssistantRouteContext) {
     selectedFindingLoading: selectedFindingQuery.isLoading,
     selectedRun: runQuery.data,
     selectedRunLoading: runQuery.isLoading,
+    notificationPreferences: notificationPreferencesQuery.data,
+    notificationPreferencesLoading: notificationPreferencesQuery.isLoading,
+    notificationPreferencesError: notificationPreferencesQuery.error,
     messages,
     send,
     sending: chatMutation.isPending,
@@ -190,6 +212,10 @@ export function useFleetGraph(context?: AssistantRouteContext) {
       decisionMutation.mutate({ id, decision }),
     decidingAction: decisionMutation.isPending,
     decisionError: decisionMutation.error,
+    updateNotificationPreferences: (preferences: FleetGraphNotificationPreferencesUpdateRequest) =>
+      notificationPreferencesMutation.mutate(preferences),
+    updatingNotificationPreferences: notificationPreferencesMutation.isPending,
+    notificationPreferencesUpdateError: notificationPreferencesMutation.error,
     refresh: () => {
       void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findingsRoot });
     },

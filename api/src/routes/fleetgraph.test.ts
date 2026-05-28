@@ -283,6 +283,46 @@ describe('FleetGraph API', () => {
     ]));
   });
 
+  it('GET and PATCH /api/fleetgraph/preferences manage per-user notification rules', async () => {
+    const defaults = await request(app)
+      .get('/api/fleetgraph/preferences')
+      .set('Cookie', sessionCookie);
+
+    expect(defaults.status).toBe(200);
+    expect(defaults.body).toMatchObject({
+      toastMinSeverity: 'high',
+      toastActionRequired: true,
+      showUnreadBadge: true,
+      updatedAt: null,
+    });
+
+    const updated = await request(app)
+      .patch('/api/fleetgraph/preferences')
+      .set('Cookie', sessionCookie)
+      .set('x-csrf-token', csrfToken)
+      .send({
+        toastMinSeverity: 'medium',
+        toastActionRequired: false,
+        showUnreadBadge: false,
+      });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body).toMatchObject({
+      toastMinSeverity: 'medium',
+      toastActionRequired: false,
+      showUnreadBadge: false,
+      updatedAt: expect.any(String),
+    });
+
+    const invalid = await request(app)
+      .patch('/api/fleetgraph/preferences')
+      .set('Cookie', sessionCookie)
+      .set('x-csrf-token', csrfToken)
+      .send({ toastMinSeverity: 'urgent' });
+
+    expect(invalid.status).toBe(400);
+  });
+
   it('GET /api/fleetgraph/findings filters to current document context', async () => {
     const res = await request(app)
       .get(`/api/fleetgraph/findings?documentId=${documentId}`)
@@ -426,6 +466,7 @@ describe('FleetGraph API', () => {
     expect(res.status).toBe(200);
     expect(res.body.paths['/fleetgraph/status']).toBeDefined();
     expect(res.body.paths['/fleetgraph/chat']).toBeDefined();
+    expect(res.body.paths['/fleetgraph/preferences']).toBeDefined();
     expect(res.body.paths['/fleetgraph/findings']).toBeDefined();
     expect(res.body.paths['/fleetgraph/findings/{id}']).toBeDefined();
     expect(res.body.paths['/fleetgraph/deliveries/{id}']).toBeDefined();

@@ -12,6 +12,10 @@ import { pool } from '../../db/client.js';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const migrationPath = resolve(__dirname, '../../db/migrations/048_fleetgraph_foundation.sql');
+const notificationPreferencesMigrationPath = resolve(
+  __dirname,
+  '../../db/migrations/051_fleetgraph_notification_preferences.sql',
+);
 
 describe('FleetGraph schema foundation', () => {
   let workspaceId: string;
@@ -24,8 +28,11 @@ describe('FleetGraph schema foundation', () => {
 
   beforeAll(async () => {
     const migrationSql = await readFile(migrationPath, 'utf8');
+    const notificationPreferencesMigrationSql = await readFile(notificationPreferencesMigrationPath, 'utf8');
     await pool.query(migrationSql);
     await pool.query(migrationSql);
+    await pool.query(notificationPreferencesMigrationSql);
+    await pool.query(notificationPreferencesMigrationSql);
 
     const workspaceResult = await pool.query(
       `INSERT INTO workspaces (name) VALUES ('FleetGraph Test') RETURNING id`,
@@ -90,6 +97,7 @@ describe('FleetGraph schema foundation', () => {
         'fleetgraph_action_proposals',
         'fleetgraph_deliveries',
         'fleetgraph_event_queue',
+        'fleetgraph_notification_preferences',
         'fleetgraph_runs',
       ]],
     );
@@ -98,6 +106,7 @@ describe('FleetGraph schema foundation', () => {
       'fleetgraph_action_proposals',
       'fleetgraph_deliveries',
       'fleetgraph_event_queue',
+      'fleetgraph_notification_preferences',
       'fleetgraph_runs',
     ]);
   });

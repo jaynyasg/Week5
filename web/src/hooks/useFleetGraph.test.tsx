@@ -1,11 +1,13 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   getFleetGraphFindings,
+  getFleetGraphNotificationPreferences,
   getFleetGraphStatus,
   sendFleetGraphMessage,
+  updateFleetGraphNotificationPreferences,
 } from '@/services/fleetgraph';
 import { useFleetGraph } from './useFleetGraph';
 
@@ -14,16 +16,24 @@ vi.mock('@/services/fleetgraph', () => ({
   getFleetGraphFindings: vi.fn(),
   getFleetGraphFinding: vi.fn(),
   getFleetGraphRun: vi.fn(),
+  getFleetGraphNotificationPreferences: vi.fn(),
   sendFleetGraphMessage: vi.fn(),
   updateFleetGraphDelivery: vi.fn(),
+  updateFleetGraphNotificationPreferences: vi.fn(),
   decideFleetGraphAction: vi.fn(),
 }));
 
 const getFleetGraphStatusMock = vi.mocked(getFleetGraphStatus);
 const getFleetGraphFindingsMock = vi.mocked(getFleetGraphFindings);
+const getFleetGraphNotificationPreferencesMock = vi.mocked(getFleetGraphNotificationPreferences);
 const sendFleetGraphMessageMock = vi.mocked(sendFleetGraphMessage);
+const updateFleetGraphNotificationPreferencesMock = vi.mocked(updateFleetGraphNotificationPreferences);
 
 describe('useFleetGraph', () => {
+  beforeEach(() => {
+    getFleetGraphNotificationPreferencesMock.mockResolvedValue(notificationPreferences);
+  });
+
   afterEach(() => {
     vi.clearAllMocks();
   });
@@ -103,6 +113,38 @@ describe('useFleetGraph', () => {
     });
     await waitFor(() => expect(result.current.messages.at(-1)?.content).toBe('FleetGraph checked 1 Ship record.'));
   });
+
+  it('updates notification preferences through the FleetGraph service', async () => {
+    getFleetGraphStatusMock.mockResolvedValue(statusResponse);
+    getFleetGraphFindingsMock.mockResolvedValue({ findings: [], deliveries: [] });
+    updateFleetGraphNotificationPreferencesMock.mockResolvedValue({
+      ...notificationPreferences,
+      toastMinSeverity: 'medium',
+      showUnreadBadge: false,
+      updatedAt: '2026-05-25T12:05:00.000Z',
+    });
+
+    const { result } = renderHook(() => useFleetGraph(), { wrapper: queryWrapper() });
+
+    await waitFor(() => expect(result.current.notificationPreferences?.toastMinSeverity).toBe('high'));
+    act(() => result.current.updateNotificationPreferences({
+      toastMinSeverity: 'medium',
+      showUnreadBadge: false,
+    }));
+
+    await waitFor(() => {
+      expect(updateFleetGraphNotificationPreferencesMock).toHaveBeenCalledWith({
+        toastMinSeverity: 'medium',
+        showUnreadBadge: false,
+      });
+    });
+    await waitFor(() => {
+      expect(result.current.notificationPreferences).toMatchObject({
+        toastMinSeverity: 'medium',
+        showUnreadBadge: false,
+      });
+    });
+  });
 });
 
 function queryWrapper() {
@@ -153,4 +195,11 @@ const findingSummary = {
   ownerUserId: 'user-1',
   createdAt: '2026-05-25T12:00:00.000Z',
   updatedAt: '2026-05-25T12:00:00.000Z',
+};
+
+const notificationPreferences = {
+  toastMinSeverity: 'high' as const,
+  toastActionRequired: true,
+  showUnreadBadge: true,
+  updatedAt: null,
 };
