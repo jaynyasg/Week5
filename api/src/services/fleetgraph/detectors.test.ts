@@ -4,8 +4,10 @@ import {
   detectFleetGraphFindings,
   detectMissingApprovedWeekPlan,
   detectMissingOwnership,
+  detectOverdueMilestone,
   detectProjectChurn,
   detectStaleIssue,
+  detectWorkloadImbalance,
 } from './detectors.js';
 import type { FleetGraphContext, FleetGraphIssueRef, FleetGraphRecordRef } from './types.js';
 
@@ -80,6 +82,53 @@ describe('FleetGraph detectors', () => {
     });
   });
 
+  it('detects overdue project milestones', () => {
+    const context = fleetContext({
+      project: record('project-1', 'project', 'Launch Project', {
+        owner_id: 'owner-1',
+        accountable_id: 'accountable-1',
+        status: 'active',
+        target_date: '2026-05-10',
+      }),
+    });
+
+    const finding = detectOverdueMilestone(context);
+
+    expect(finding).toMatchObject({
+      key: 'overdue-milestone:project-1:2026-05-10',
+      severity: 'high',
+      kind: 'stale_commitment',
+      ownerUserId: 'owner-1',
+    });
+    expect(finding?.summary).toContain('15 days past');
+  });
+
+  it('detects workload imbalance across active issues', () => {
+    const context = fleetContext({
+      project: record('project-1', 'project', 'Launch Project', {
+        owner_id: 'owner-1',
+        accountable_id: 'accountable-1',
+      }),
+      issues: [
+        issue('issue-1', 'Auth hardening', 'todo', '2026-05-24T00:00:00.000Z', 'owner-1', 8),
+        issue('issue-2', 'Billing import', 'todo', '2026-05-24T00:00:00.000Z', 'owner-1', 8),
+        issue('issue-3', 'Latency trace', 'todo', '2026-05-24T00:00:00.000Z', 'owner-1', 8),
+        issue('issue-4', 'Copy polish', 'todo', '2026-05-24T00:00:00.000Z', 'owner-1', 8),
+        issue('issue-5', 'Docs cleanup', 'todo', '2026-05-24T00:00:00.000Z', 'owner-2', 4),
+      ],
+    });
+
+    const finding = detectWorkloadImbalance(context);
+
+    expect(finding).toMatchObject({
+      key: 'workload-imbalance:project-1:owner-1',
+      severity: 'medium',
+      kind: 'delivery_conflict',
+      ownerUserId: 'owner-1',
+    });
+    expect(finding?.evidence).toHaveLength(4);
+  });
+
   it('returns no findings when no condition is surfacing-worthy', () => {
     const context = fleetContext({
       week: record('week-1', 'sprint', 'Week 5', { sprint_status: 'active' }),
@@ -130,12 +179,14 @@ function issue(
   title: string,
   state = 'todo',
   updatedAt = '2026-05-01T00:00:00.000Z',
+  assigneeId = 'owner-1',
+  estimateHours = 1,
 ): FleetGraphIssueRef {
   return {
-    ...record(id, 'issue', title, { state, assignee_id: 'owner-1', priority: 'high' }, updatedAt),
+    ...record(id, 'issue', title, { state, assignee_id: assigneeId, priority: 'high', estimate_hours: estimateHours }, updatedAt),
     documentType: 'issue',
     state,
-    assigneeId: 'owner-1',
+    assigneeId,
     priority: 'high',
   };
 }

@@ -7,6 +7,9 @@ import type {
 } from './types.js';
 
 const STALE_ISSUE_DAYS = 7;
+const WORKLOAD_IMBALANCE_MIN_ACTIVE_ISSUES = 4;
+const WORKLOAD_IMBALANCE_MIN_ESTIMATED_HOURS = 24;
+const WORKLOAD_IMBALANCE_RATIO = 2;
 
 export function detectFleetGraphFindings(context: FleetGraphContext): FleetGraphFindingCandidate[] {
   return [
@@ -15,6 +18,8 @@ export function detectFleetGraphFindings(context: FleetGraphContext): FleetGraph
     detectMissingOwnership(context),
     detectStaleIssue(context),
     detectProjectChurn(context),
+    detectOverdueMilestone(context),
+    detectWorkloadImbalance(context),
   ].filter((candidate): candidate is FleetGraphFindingCandidate => Boolean(candidate));
 }
 
@@ -151,6 +156,97 @@ export function detectProjectChurn(context: FleetGraphContext): FleetGraphFindin
   };
 }
 
+export function detectOverdueMilestone(context: FleetGraphContext): FleetGraphFindingCandidate | null {
+  const target = context.project ?? context.week;
+  if (!target) return null;
+
+  const status = readString(target.properties.status)
+    ?? readString(target.properties.project_status)
+    ?? readString(target.properties.sprint_status);
+  if (status && isClosedStatus(status)) return null;
+
+  const dueDate = readMilestoneDate(target);
+  if (!dueDate) return null;
+
+  const now = new Date(context.now);
+  if (Number.isNaN(now.getTime()) || dueDate >= startOfDay(now)) return null;
+
+  const daysLate = Math.max(1, daysBetween(dueDate, now));
+  const ownerUserId = readString(target.properties.owner_id)
+    ?? readString(target.properties.accountable_id);
+
+  return {
+    key: `overdue-milestone:${target.id}:${dueDate.toISOString().slice(0, 10)}`,
+    title: `Milestone overdue: ${target.title}`,
+    severity: daysLate >= 7 ? 'high' : 'medium',
+    kind: 'stale_commitment',
+    confidence: 0.82,
+    summary: `${target.title} is ${daysLate} day${daysLate === 1 ? '' : 's'} past its target date.`,
+    rationale: 'FleetGraph raises this when an active project or week has a target date in the past and has not been closed.',
+    targetDocumentId: target.id,
+    targetDocumentType: target.documentType,
+    ownerUserId,
+    evidence: [
+      recordToEvidence(target, `Target date ${dueDate.toISOString().slice(0, 10)} is overdue by ${daysLate} day${daysLate === 1 ? '' : 's'}.`),
+    ],
+  };
+}
+
+export function detectWorkloadImbalance(context: FleetGraphContext): FleetGraphFindingCandidate | null {
+  const activeIssues = context.issues.filter((issue) => !isClosedStatus(issue.state));
+  const assigneeLoads = new Map<string, { issues: FleetGraphIssueRef[]; estimatedHours: number }>();
+
+  for (const issue of activeIssues) {
+    if (!issue.assigneeId) continue;
+    const load = assigneeLoads.get(issue.assigneeId) ?? { issues: [], estimatedHours: 0 };
+    load.issues.push(issue);
+    load.estimatedHours += readIssueEstimate(issue);
+    assigneeLoads.set(issue.assigneeId, load);
+  }
+
+  const rankedLoads = [...assigneeLoads.entries()]
+    .map(([assigneeId, load]) => ({ assigneeId, ...load }))
+    .sort((left, right) => right.estimatedHours - left.estimatedHours || right.issues.length - left.issues.length);
+  const topLoad = rankedLoads[0];
+  if (!topLoad) return null;
+
+  const otherLoads = rankedLoads.slice(1);
+  const comparisonLoad = otherLoads[0]?.estimatedHours ?? 0;
+  const isLargeEnough = topLoad.issues.length >= WORKLOAD_IMBALANCE_MIN_ACTIVE_ISSUES
+    || topLoad.estimatedHours >= WORKLOAD_IMBALANCE_MIN_ESTIMATED_HOURS;
+  const isImbalanced = comparisonLoad === 0
+    ? topLoad.issues.length >= WORKLOAD_IMBALANCE_MIN_ACTIVE_ISSUES
+    : topLoad.estimatedHours >= comparisonLoad * WORKLOAD_IMBALANCE_RATIO;
+  if (!isLargeEnough || !isImbalanced) return null;
+
+  const fallbackIssue = topLoad.issues[0];
+  if (!fallbackIssue) return null;
+  const target = context.project ?? context.week ?? fallbackIssue;
+  const estimatedLabel = Number.isInteger(topLoad.estimatedHours)
+    ? String(topLoad.estimatedHours)
+    : topLoad.estimatedHours.toFixed(1);
+
+  return {
+    key: `workload-imbalance:${target.id}:${topLoad.assigneeId}`,
+    title: `Workload imbalance: ${topLoad.assigneeId}`,
+    severity: topLoad.estimatedHours >= 40 || topLoad.issues.length >= 6 ? 'high' : 'medium',
+    kind: 'delivery_conflict',
+    confidence: 0.76,
+    summary: `${topLoad.assigneeId} owns ${topLoad.issues.length} active issue${topLoad.issues.length === 1 ? '' : 's'} totaling about ${estimatedLabel} hours.`,
+    rationale: 'FleetGraph compares open issue ownership and estimated effort so an overloaded owner can be reviewed before delivery slips.',
+    targetDocumentId: target.id,
+    targetDocumentType: target.documentType,
+    ownerUserId: topLoad.assigneeId,
+    evidence: [
+      recordToEvidence(target, `Highest assigned load is ${topLoad.issues.length} active issue${topLoad.issues.length === 1 ? '' : 's'} totaling about ${estimatedLabel} hours.`),
+      ...topLoad.issues.slice(0, 3).map((issue) => {
+        const estimate = readIssueEstimate(issue);
+        return recordToEvidence(issue, `Assigned issue contributing ${estimate} estimated hour${estimate === 1 ? '' : 's'}.`);
+      }),
+    ],
+  };
+}
+
 function isActiveWeek(week: FleetGraphRecordRef, nowIso: string): boolean {
   const explicitStatus = readString(week.properties.sprint_status) ?? readString(week.properties.status);
   if (explicitStatus === 'active') return true;
@@ -165,10 +261,15 @@ function isActiveWeek(week: FleetGraphRecordRef, nowIso: string): boolean {
 }
 
 function isIssueStale(issue: FleetGraphIssueRef, nowIso: string): boolean {
-  if (!issue.state || ['done', 'cancelled'].includes(issue.state)) return false;
+  if (!issue.state || isClosedStatus(issue.state)) return false;
   if (!issue.updatedAt) return false;
   const ageMs = new Date(nowIso).getTime() - new Date(issue.updatedAt).getTime();
   return ageMs >= STALE_ISSUE_DAYS * 24 * 60 * 60 * 1000;
+}
+
+function isClosedStatus(status: unknown): boolean {
+  const normalized = typeof status === 'string' ? status.trim().toLowerCase() : '';
+  return ['done', 'completed', 'complete', 'cancelled', 'canceled', 'archived', 'resolved', 'closed'].includes(normalized);
 }
 
 function readString(value: unknown): string | null {
@@ -179,4 +280,35 @@ function readDate(value: unknown): Date | null {
   if (typeof value !== 'string' || !value.trim()) return null;
   const date = new Date(value);
   return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function readNumber(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value !== 'string' || !value.trim()) return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function readIssueEstimate(issue: FleetGraphIssueRef): number {
+  return readNumber(issue.properties.estimate_hours)
+    ?? readNumber(issue.properties.estimated_hours)
+    ?? readNumber(issue.properties.estimate)
+    ?? readNumber(issue.properties.points)
+    ?? 1;
+}
+
+function readMilestoneDate(record: FleetGraphRecordRef): Date | null {
+  return readDate(record.properties.target_date)
+    ?? readDate(record.properties.due_date)
+    ?? readDate(record.properties.planned_end_date)
+    ?? readDate(record.properties.end_date);
+}
+
+function startOfDay(date: Date): Date {
+  return new Date(Date.UTC(date.getUTCFullYear(), date.getUTCMonth(), date.getUTCDate()));
+}
+
+function daysBetween(start: Date, end: Date): number {
+  const dayMs = 24 * 60 * 60 * 1000;
+  return Math.floor((startOfDay(end).getTime() - startOfDay(start).getTime()) / dayMs);
 }

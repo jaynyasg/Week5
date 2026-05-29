@@ -125,6 +125,20 @@ FleetGraph uses a hybrid trigger model:
 
 The latency target is less than 5 minutes from Ship event to surfaced finding. The queue cadence leaves room for retries while staying inside the PRD target.
 
+### Detector Catalog
+
+FleetGraph detectors are plain functions in `api/src/services/fleetgraph/detectors.ts` that read the Ship evidence bundle and return finding candidates. The graph can add more detectors without changing the queue, persistence, or UI contracts.
+
+Implemented detectors:
+
+- Planning gap: active week without an approved plan signal.
+- Approved-plan drift: approved weekly plan changed after approval, routed through HITL.
+- Ownership gap: project or program missing owner/accountable metadata.
+- Stale issue: active issue has not been updated for the stale threshold.
+- Project churn: multiple stale active issues in one project.
+- Overdue milestone: active project or week target/due/end date is in the past.
+- Workload imbalance: one owner has a materially higher active issue load than peers.
+
 ### Graph Persistence
 
 FleetGraph uses LangGraph with the Postgres checkpointer:
@@ -138,6 +152,22 @@ Thread ID examples:
 - `fleetgraph:proactive:{workspaceId}:{runId}`
 - `fleetgraph:chat:{workspaceId}:{userId}:{documentId}`
 - `fleetgraph:approval:{workspaceId}:{proposalId}`
+
+### Retention Policy
+
+FleetGraph now has a deployable retention command, `api/src/scripts/fleetgraph-retention.ts`, and a daily Render cron job, `ship-fleetgraph-retention`.
+
+Default retention windows:
+
+| Data | Retention | Behavior |
+|---|---:|---|
+| Completed queue events | 14 days | Deleted after the queue event is terminal and old enough |
+| Failed queue events | 90 days | Retained longer for debugging, then deleted |
+| Terminal runs | 90 days | Deleted only when status is completed, failed, or cancelled and no pending action proposal references the run |
+| Resolved/dismissed findings | 180 days | Soft-deleted through `documents.deleted_at`; open, acknowledged, and pending-gate findings are retained |
+| LangGraph checkpoints | 90 days | Checkpoint rows for terminal FleetGraph threads are deleted after pending HITL gates are excluded |
+
+The windows are configurable with `SHIP_FLEETGRAPH_RETENTION_COMPLETED_EVENTS_DAYS`, `SHIP_FLEETGRAPH_RETENTION_FAILED_EVENTS_DAYS`, `SHIP_FLEETGRAPH_RETENTION_RUNS_DAYS`, `SHIP_FLEETGRAPH_RETENTION_RESOLVED_FINDINGS_DAYS`, `SHIP_FLEETGRAPH_RETENTION_CHECKPOINTS_DAYS`, and `SHIP_FLEETGRAPH_RETENTION_DRY_RUN`.
 
 ### UI Integration
 
@@ -165,11 +195,13 @@ All routes must be registered with OpenAPI following Ship's route/schema pattern
 
 ### Focused UI Design Review
 
-Review mode: focused text-only design review. The gstack visual designer was not available in this environment, so no mockups were generated.
+Review mode: focused text-only design review plus checked-in low-fidelity mockups.
 
 Initial design completeness: 4/10.
 
 Post-review design completeness: 8/10.
+
+Visual mockups added on 2026-05-29: [`docs/fleetgraph-visual-mockups.md`](docs/fleetgraph-visual-mockups.md). The mockups cover the drawer inbox, finding detail, HITL approval gate, notification preferences, and mobile drill-in states.
 
 The plan now specifies the high-risk UI surfaces that would otherwise be left to implementation guesswork: the FleetGraph drawer hierarchy, finding states, notification behavior, action proposal gates, and mobile/accessibility constraints.
 
@@ -323,7 +355,6 @@ FleetGraph must support:
 - A new global notification center.
 - Decorative AI visual branding.
 - Multi-finding split panes inside the drawer.
-- User-configurable notification rules.
 - Bulk approve/reject flows.
 
 ### Actor Model
@@ -444,7 +475,7 @@ flowchart TD
 | Trigger | Entry | FleetGraph event queue, scheduled sweep, or authenticated chat request | Initial graph state with mode, workspace, user, route, trigger, and thread IDs |
 | Normalize context | Context node | Request payload, queue payload, route context | Canonical target document, trigger type, idempotency key, and graph mode |
 | Load Ship context | Data node | Real Ship workspace, document, project, week, issue, timeline, accountability, and association rows | Evidence bundle used by downstream decision nodes |
-| Detect conditions | Decision node | Evidence bundle | Candidate detections for planning gaps, stale issues, project churn, approval drift, ownership gaps, and contextual chat |
+| Detect conditions | Decision node | Evidence bundle | Candidate detections for planning gaps, stale issues, project churn, approval drift, ownership gaps, overdue milestones, workload imbalance, and contextual chat |
 | Rank and route | Decision node | Candidate detections and user/audience rules | Severity, notification audience, and whether mutation is proposed |
 | Persist finding | Side-effect node | Approved finding candidate | `fleetgraph_finding` document, document associations, delivery rows, audit metadata |
 | HITL proposal | Interrupt node | Proposed mutation and evidence | `fleetgraph_action_proposals` row and LangGraph interrupt/checkpoint |
@@ -628,7 +659,7 @@ Required implementation tests:
 
 ### Current Implementation Validation
 
-Last checked: 2026-05-27.
+Last checked: 2026-05-29.
 
 Passing local checks:
 
@@ -655,6 +686,8 @@ Current deterministic evidence:
 - `web/src/components/assistant/AskShipPanel.test.tsx`, `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx`, and `web/src/components/ui/Toast.test.tsx` verify the FleetGraph drawer's mobile full-width class contract, 44px mobile action targets, and mobile toast offset above the pinned composer.
 - `api/src/services/fleetgraph/graph.test.ts`, included in `pnpm --filter @ship/api test:fleetgraph-eval`, verifies the compiled LangGraph workflow can checkpoint an approval interrupt with `MemorySaver` and resume with a human decision.
 - `api/src/scripts/fleetgraph-drain.test.ts`, included in `pnpm --filter @ship/api test:fleetgraph-eval`, verifies the scheduled drain command keeps local drain-only defaults and parses Render sweep settings for proactive backstop coverage.
+- `api/src/services/fleetgraph/detectors.test.ts` verifies the detector catalog, including overdue milestones and workload imbalance.
+- `api/src/services/fleetgraph/retention.test.ts` verifies configurable retention windows, dry-run reporting, terminal history pruning, resolved-finding soft delete, and preservation of active work/HITL gates.
 - `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus the no-finding branch: week planning gap, project churn/stalled issues, stale engineer issue, approved-plan-change HITL, missing ownership, context chat, and no-finding.
 - DB-backed validation completed against isolated Docker Postgres on 2026-05-26: `pnpm --filter @ship/api test:fleetgraph-api` passed 22 tests, and the focused FleetGraph OpenAPI/route run passed 17 tests.
 - FleetGraph E2E completed on 2026-05-26 with `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1`: 2 passed, including the timed event-to-finding path under the 5 minute requirement.
@@ -715,5 +748,4 @@ Important files:
 - `web/src/pages/App.tsx`
 
 
-- **UNRESOLVED:** visual mockups were not generated because the gstack designer binary is not available in this environment.
 - **VERDICT:** ENG CLEARED + DESIGN FOCUSED PASS IMPLEMENTED. Local MVP evidence, shared LangSmith traces, public deployment, and public timed latency verification are complete.

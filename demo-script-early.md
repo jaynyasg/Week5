@@ -13,12 +13,17 @@ Open these tabs before starting:
 1. Deployed app: `https://ship-wf2i.onrender.com`
 2. `FLEETGRAPH.md` — scroll to **Test Cases** section
 3. `FLEETGRAPH.md` — scroll to **Architecture Decisions** section
-4. LangSmith proactive finding trace: `https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r`
-5. LangSmith HITL/action proposal trace: `https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r`
-6. LangSmith on-demand chat trace: `https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r`
+4. LangSmith proactive finding trace — open this exact URL and leave it in a tab named mentally as **129c549c**:
+   `https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r`
+5. LangSmith HITL/action proposal trace — open this exact URL and leave it in a tab named mentally as **fdca7b9c**:
+   `https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r`
+6. LangSmith on-demand chat trace — open this exact URL and leave it in a tab named mentally as **6a0f01b2**:
+   `https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r`
 7. Ask Ship drawer ready with this question: `What's at risk on this project?`
 
 Do not show local login files, session cookies, bearer tokens, or Render environment variables.
+
+When the script says "switch to trace `129c549c`", it means switch to the already-open browser tab whose LangSmith URL starts with that public trace ID. If the tab is missing, paste the full URL from this list; do not search LangSmith live during the recording.
 
 ---
 
@@ -46,7 +51,11 @@ Walk through three of the six rows, pausing on each:
 
 > A week document exists without an approved plan signal. FleetGraph detects the gap and delivers a planning-gap finding to the week owner. Here is the trace.
 
-Switch to the proactive finding trace tab: `129c549c`.
+Switch to the proactive finding trace tab:
+
+1. Use the browser tab with URL `https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r`.
+2. If it is not open, paste that full URL into a new tab.
+3. In the LangSmith trace view, show the run tree/timeline on the left or center of the page.
 
 Point at:
 - The trigger node receiving the `document.created` event
@@ -57,7 +66,11 @@ Point at:
 
 > An approved plan changes after approval. FleetGraph detects the drift and interrupts the graph, waiting for a human to approve or reject before any mutation happens. Here is the trace.
 
-Switch to the HITL trace tab: `fdca7b9c`.
+Switch to the HITL trace tab:
+
+1. Use the browser tab with URL `https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r`.
+2. If it is not open, paste that full URL into a new tab.
+3. In the LangSmith trace view, show the branch where the graph stops at the human approval/action proposal step.
 
 Point at:
 - The graph reaching the HITL proposal node
@@ -68,7 +81,11 @@ Point at:
 
 > A signed-in user opens FleetGraph from a project route and asks a question. The graph loads the current route context, reads the live Ship state for that project, and returns a grounded answer scoped to what the user is looking at. Here is the trace.
 
-Switch to the chat trace tab: `6a0f01b2`.
+Switch to the chat trace tab:
+
+1. Use the browser tab with URL `https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r`.
+2. If it is not open, paste that full URL into a new tab.
+3. In the LangSmith trace view, show the context-loading and response-generation steps.
 
 Point at:
 - The context node reading the route path and document ID

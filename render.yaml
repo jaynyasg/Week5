@@ -115,6 +115,31 @@ services:
       - key: OPENAI_API_KEY
         sync: false
 
+  - type: cron
+    name: ship-fleetgraph-retention
+    runtime: node
+    plan: starter
+    schedule: '17 9 * * *'
+    buildCommand: corepack enable && corepack prepare pnpm@10.27.0 --activate && pnpm install --frozen-lockfile --prod=false && pnpm build:api
+    startCommand: node api/dist/scripts/fleetgraph-retention.js
+    envVars:
+      - key: NODE_VERSION
+        value: 20.19.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: ship-db
+          property: connectionString
+      - key: SHIP_FLEETGRAPH_RETENTION_COMPLETED_EVENTS_DAYS
+        value: "14"
+      - key: SHIP_FLEETGRAPH_RETENTION_FAILED_EVENTS_DAYS
+        value: "90"
+      - key: SHIP_FLEETGRAPH_RETENTION_RUNS_DAYS
+        value: "90"
+      - key: SHIP_FLEETGRAPH_RETENTION_RESOLVED_FINDINGS_DAYS
+        value: "180"
+      - key: SHIP_FLEETGRAPH_RETENTION_CHECKPOINTS_DAYS
+        value: "90"
+
 databases:
   - name: ship-db
     databaseName: ship
