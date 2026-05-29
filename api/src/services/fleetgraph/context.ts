@@ -2,6 +2,7 @@ import type { AssistantRouteContext } from '@ship/shared';
 import { pool } from '../../db/client.js';
 import type {
   FleetGraphContext,
+  FleetGraphHistoryRef,
   FleetGraphIssueRef,
   FleetGraphRecordRef,
 } from './types.js';
@@ -14,6 +15,20 @@ interface DocumentRow {
   created_by: string | null;
   updated_at: Date | string | null;
 }
+
+interface DocumentHistoryRow {
+  document_id: string;
+  document_type: string;
+  title: string;
+  field: string;
+  old_value: string | null;
+  new_value: string | null;
+  changed_by: string | null;
+  automated_by: string | null;
+  created_at: Date | string;
+}
+
+const HISTORY_LOOKBACK_DAYS = 60;
 
 export async function loadFleetGraphContext(input: {
   workspaceId: string;
@@ -32,6 +47,14 @@ export async function loadFleetGraphContext(input: {
   const weekPlan = week ? await loadWeekPlan(input.workspaceId, week.id) : null;
   const issues = await loadRelatedIssues(input.workspaceId, { projectId: project?.id, weekId: week?.id });
   const workspaceAdminUserIds = await loadWorkspaceAdminUserIds(input.workspaceId);
+  const history = await loadRecentHistory(input.workspaceId, [
+    currentDocument,
+    program,
+    project,
+    week,
+    weekPlan,
+    ...issues,
+  ], input.now ?? new Date());
 
   return {
     workspaceId: input.workspaceId,
@@ -44,6 +67,7 @@ export async function loadFleetGraphContext(input: {
     week,
     weekPlan,
     issues,
+    history,
     now: (input.now ?? new Date()).toISOString(),
   };
 }
@@ -200,6 +224,44 @@ async function loadWorkspaceAdminUserIds(workspaceId: string): Promise<string[]>
     [workspaceId],
   );
   return result.rows.map((row) => row.user_id);
+}
+
+async function loadRecentHistory(
+  workspaceId: string,
+  records: Array<FleetGraphRecordRef | null | undefined>,
+  now: Date,
+): Promise<FleetGraphHistoryRef[]> {
+  const documentIds = [...new Set(records
+    .map((record) => record?.id)
+    .filter((id): id is string => Boolean(id)))];
+  if (!documentIds.length) return [];
+
+  const cutoff = new Date(now.getTime() - HISTORY_LOOKBACK_DAYS * 24 * 60 * 60 * 1000);
+  const result = await pool.query<DocumentHistoryRow>(
+    `SELECT dh.document_id, d.document_type, d.title, dh.field, dh.old_value, dh.new_value,
+            dh.changed_by, dh.automated_by, dh.created_at
+     FROM document_history dh
+     JOIN documents d ON d.id = dh.document_id
+     WHERE d.workspace_id = $1
+       AND d.deleted_at IS NULL
+       AND dh.document_id = ANY($2::uuid[])
+       AND dh.created_at >= $3
+     ORDER BY dh.created_at DESC
+     LIMIT 200`,
+    [workspaceId, documentIds, cutoff.toISOString()],
+  );
+
+  return result.rows.map((row) => ({
+    documentId: row.document_id,
+    documentType: row.document_type,
+    documentTitle: row.title,
+    field: row.field,
+    oldValue: row.old_value,
+    newValue: row.new_value,
+    changedBy: row.changed_by,
+    automatedBy: row.automated_by,
+    createdAt: toIsoString(row.created_at),
+  }));
 }
 
 function toRecordRef(row: DocumentRow): FleetGraphRecordRef {

@@ -1,17 +1,37 @@
 import { describe, expect, it } from 'vitest';
 import {
+  detectRaciDrift,
   detectChangedApprovedWeekPlan,
   detectFleetGraphFindings,
   detectMissingApprovedWeekPlan,
   detectMissingOwnership,
   detectOverdueMilestone,
   detectProjectChurn,
+  detectScopeChurnRate,
   detectStaleIssue,
   detectWorkloadImbalance,
+  fleetGraphDetectorRegistry,
 } from './detectors.js';
-import type { FleetGraphContext, FleetGraphIssueRef, FleetGraphRecordRef } from './types.js';
+import type { FleetGraphContext, FleetGraphHistoryRef, FleetGraphIssueRef, FleetGraphRecordRef } from './types.js';
 
 describe('FleetGraph detectors', () => {
+  it('defines registry metadata for every detector with unique ids and noise defaults', () => {
+    expect(fleetGraphDetectorRegistry).toHaveLength(9);
+    expect(new Set(fleetGraphDetectorRegistry.map((detector) => detector.id)).size).toBe(9);
+    expect(fleetGraphDetectorRegistry.every((detector) => detector.noiseDefault === 'toast' || detector.noiseDefault === 'badge')).toBe(true);
+    expect(fleetGraphDetectorRegistry.map((detector) => detector.id)).toEqual([
+      'missing-approved-plan',
+      'approved-plan-drift',
+      'missing-ownership',
+      'stale-issue',
+      'project-churn',
+      'overdue-milestone',
+      'workload-imbalance',
+      'scope-churn-rate',
+      'raci-drift',
+    ]);
+  });
+
   it('surfaces an active week without an approved plan', () => {
     const context = fleetContext({
       week: record('week-1', 'sprint', 'Week 5', {
@@ -129,6 +149,83 @@ describe('FleetGraph detectors', () => {
     expect(finding?.evidence).toHaveLength(4);
   });
 
+  it('detects scope churn from document history changes', () => {
+    const context = fleetContext({
+      project: record('project-1', 'project', 'Launch Project', {
+        owner_id: 'owner-1',
+        accountable_id: 'accountable-1',
+      }),
+      weekPlan: record('plan-1', 'weekly_plan', 'Week Plan', {}),
+      issues: [
+        issue('issue-1', 'Auth hardening', 'todo', '2026-05-24T00:00:00.000Z', 'owner-1', 8),
+        issue('issue-2', 'Billing import', 'todo', '2026-05-24T00:00:00.000Z', 'owner-2', 4),
+      ],
+      history: [
+        history('project-1', 'project', 'Launch Project', 'scope', 'MVP', 'MVP plus import'),
+        history('issue-1', 'issue', 'Auth hardening', 'estimate_hours', '4', '8'),
+        history('issue-1', 'issue', 'Auth hardening', 'priority', 'medium', 'high'),
+        history('issue-2', 'issue', 'Billing import', 'belongs_to', 'Backlog', 'Launch Project'),
+        history('plan-1', 'weekly_plan', 'Week Plan', 'content', 'old plan', 'new plan'),
+      ],
+    });
+
+    const finding = detectScopeChurnRate(context);
+
+    expect(finding).toMatchObject({
+      key: 'scope-churn-rate:project-1:2026-05-11',
+      severity: 'medium',
+      kind: 'scope_drift',
+      ownerUserId: 'owner-1',
+    });
+    expect(finding?.evidence[1]).toMatchObject({
+      sourceType: 'timeline',
+      title: 'Launch Project',
+    });
+  });
+
+  it('detects RACI drift from ownership and assignment history', () => {
+    const context = fleetContext({
+      project: record('project-1', 'project', 'Launch Project', {
+        owner_id: 'owner-3',
+        accountable_id: 'accountable-1',
+      }),
+      issues: [
+        issue('issue-1', 'Auth hardening', 'todo', '2026-05-24T00:00:00.000Z', 'owner-1', 8),
+      ],
+      history: [
+        history('project-1', 'project', 'Launch Project', 'owner_id', 'owner-1', 'owner-2'),
+        history('project-1', 'project', 'Launch Project', 'accountable_id', 'accountable-0', 'accountable-1'),
+        history('issue-1', 'issue', 'Auth hardening', 'assignee_id', 'owner-2', 'owner-1'),
+      ],
+    });
+
+    const finding = detectRaciDrift(context);
+
+    expect(finding).toMatchObject({
+      key: 'raci-drift:project-1:2026-04-25',
+      severity: 'medium',
+      kind: 'planning_gap',
+      ownerUserId: 'owner-3',
+    });
+    expect(finding?.summary).toContain('3 ownership or accountability changes');
+  });
+
+  it('adds detector metadata to registry-driven findings', () => {
+    const findings = detectFleetGraphFindings(fleetContext({
+      project: record('project-1', 'project', 'Launch Project', {
+        owner_id: 'owner-1',
+        accountable_id: 'accountable-1',
+        status: 'active',
+        target_date: '2026-05-10',
+      }),
+    }));
+
+    expect(findings).toContainEqual(expect.objectContaining({
+      detectorId: 'overdue-milestone',
+      noiseDefault: 'badge',
+    }));
+  });
+
   it('returns no findings when no condition is surfacing-worthy', () => {
     const context = fleetContext({
       week: record('week-1', 'sprint', 'Week 5', { sprint_status: 'active' }),
@@ -151,8 +248,31 @@ function fleetContext(overrides: Partial<FleetGraphContext> = {}): FleetGraphCon
     workspaceAdminUserIds: ['admin-1'],
     routePath: '/documents/project-1',
     issues: [],
+    history: [],
     now: '2026-05-25T00:00:00.000Z',
     ...overrides,
+  };
+}
+
+function history(
+  documentId: string,
+  documentType: string,
+  documentTitle: string,
+  field: string,
+  oldValue: string | null,
+  newValue: string | null,
+  createdAt = '2026-05-24T00:00:00.000Z',
+): FleetGraphHistoryRef {
+  return {
+    documentId,
+    documentType,
+    documentTitle,
+    field,
+    oldValue,
+    newValue,
+    changedBy: 'user-1',
+    automatedBy: null,
+    createdAt,
   };
 }
 

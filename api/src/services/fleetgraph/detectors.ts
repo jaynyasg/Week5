@@ -1,7 +1,12 @@
 import { recordToEvidence } from './context.js';
 import type {
+  FleetGraphFindingKind,
+  FleetGraphFindingSeverity,
+} from '@ship/shared';
+import type {
   FleetGraphContext,
   FleetGraphFindingCandidate,
+  FleetGraphHistoryRef,
   FleetGraphIssueRef,
   FleetGraphRecordRef,
 } from './types.js';
@@ -10,17 +15,130 @@ const STALE_ISSUE_DAYS = 7;
 const WORKLOAD_IMBALANCE_MIN_ACTIVE_ISSUES = 4;
 const WORKLOAD_IMBALANCE_MIN_ESTIMATED_HOURS = 24;
 const WORKLOAD_IMBALANCE_RATIO = 2;
+const SCOPE_CHURN_WINDOW_DAYS = 14;
+const SCOPE_CHURN_MIN_CHANGES = 5;
+const RACI_DRIFT_WINDOW_DAYS = 30;
+const RACI_DRIFT_MIN_CHANGES = 3;
+
+export type FleetGraphDetectorId =
+  | 'missing-approved-plan'
+  | 'approved-plan-drift'
+  | 'missing-ownership'
+  | 'stale-issue'
+  | 'project-churn'
+  | 'overdue-milestone'
+  | 'workload-imbalance'
+  | 'scope-churn-rate'
+  | 'raci-drift';
+
+export interface FleetGraphDetectorDefinition {
+  id: FleetGraphDetectorId;
+  label: string;
+  description: string;
+  kind: FleetGraphFindingKind;
+  defaultSeverity: FleetGraphFindingSeverity;
+  noiseDefault: 'toast' | 'badge';
+  windowDays?: number;
+  detect: (context: FleetGraphContext) => FleetGraphFindingCandidate | null;
+}
+
+export const fleetGraphDetectorRegistry: readonly FleetGraphDetectorDefinition[] = [
+  {
+    id: 'missing-approved-plan',
+    label: 'Planning gap',
+    description: 'Active week does not have an approved plan signal.',
+    kind: 'planning_gap',
+    defaultSeverity: 'high',
+    noiseDefault: 'toast',
+    detect: detectMissingApprovedWeekPlan,
+  },
+  {
+    id: 'approved-plan-drift',
+    label: 'Approved-plan drift',
+    description: 'Approved weekly plan changed after approval and needs HITL review.',
+    kind: 'scope_drift',
+    defaultSeverity: 'medium',
+    noiseDefault: 'badge',
+    detect: detectChangedApprovedWeekPlan,
+  },
+  {
+    id: 'missing-ownership',
+    label: 'Ownership gap',
+    description: 'Project or program is missing owner/accountable metadata.',
+    kind: 'planning_gap',
+    defaultSeverity: 'medium',
+    noiseDefault: 'badge',
+    detect: detectMissingOwnership,
+  },
+  {
+    id: 'stale-issue',
+    label: 'Stale issue',
+    description: 'Active issue has not been updated recently.',
+    kind: 'stale_commitment',
+    defaultSeverity: 'medium',
+    noiseDefault: 'badge',
+    windowDays: STALE_ISSUE_DAYS,
+    detect: detectStaleIssue,
+  },
+  {
+    id: 'project-churn',
+    label: 'Project churn',
+    description: 'Multiple active issues are stale in the same project.',
+    kind: 'dependency_risk',
+    defaultSeverity: 'high',
+    noiseDefault: 'toast',
+    windowDays: STALE_ISSUE_DAYS,
+    detect: detectProjectChurn,
+  },
+  {
+    id: 'overdue-milestone',
+    label: 'Overdue milestone',
+    description: 'Active project or week has a target date in the past.',
+    kind: 'stale_commitment',
+    defaultSeverity: 'medium',
+    noiseDefault: 'badge',
+    detect: detectOverdueMilestone,
+  },
+  {
+    id: 'workload-imbalance',
+    label: 'Workload imbalance',
+    description: 'One assignee has materially more active issue load than peers.',
+    kind: 'delivery_conflict',
+    defaultSeverity: 'medium',
+    noiseDefault: 'badge',
+    detect: detectWorkloadImbalance,
+  },
+  {
+    id: 'scope-churn-rate',
+    label: 'Scope churn rate',
+    description: 'Project or week scope changed repeatedly inside the recent history window.',
+    kind: 'scope_drift',
+    defaultSeverity: 'medium',
+    noiseDefault: 'badge',
+    windowDays: SCOPE_CHURN_WINDOW_DAYS,
+    detect: detectScopeChurnRate,
+  },
+  {
+    id: 'raci-drift',
+    label: 'RACI drift',
+    description: 'Ownership, accountability, or assignment fields changed repeatedly over time.',
+    kind: 'planning_gap',
+    defaultSeverity: 'medium',
+    noiseDefault: 'badge',
+    windowDays: RACI_DRIFT_WINDOW_DAYS,
+    detect: detectRaciDrift,
+  },
+] as const;
 
 export function detectFleetGraphFindings(context: FleetGraphContext): FleetGraphFindingCandidate[] {
-  return [
-    detectMissingApprovedWeekPlan(context),
-    detectChangedApprovedWeekPlan(context),
-    detectMissingOwnership(context),
-    detectStaleIssue(context),
-    detectProjectChurn(context),
-    detectOverdueMilestone(context),
-    detectWorkloadImbalance(context),
-  ].filter((candidate): candidate is FleetGraphFindingCandidate => Boolean(candidate));
+  const findings: FleetGraphFindingCandidate[] = [];
+  for (const detector of fleetGraphDetectorRegistry) {
+    const candidate = detector.detect(context);
+    if (candidate) {
+      findings.push({ ...candidate, detectorId: detector.id, noiseDefault: detector.noiseDefault });
+    }
+  }
+  return findings;
 }
 
 export function detectMissingApprovedWeekPlan(context: FleetGraphContext): FleetGraphFindingCandidate | null {
@@ -247,6 +365,77 @@ export function detectWorkloadImbalance(context: FleetGraphContext): FleetGraphF
   };
 }
 
+export function detectScopeChurnRate(context: FleetGraphContext): FleetGraphFindingCandidate | null {
+  const target = context.project ?? context.week;
+  if (!target) return null;
+
+  const relatedDocumentIds = new Set([
+    target.id,
+    ...context.issues.map((issue) => issue.id),
+    ...(context.weekPlan ? [context.weekPlan.id] : []),
+  ]);
+  const scopeChanges = recentHistory(context, SCOPE_CHURN_WINDOW_DAYS)
+    .filter((entry) => relatedDocumentIds.has(entry.documentId))
+    .filter(isScopeChange);
+  if (scopeChanges.length < SCOPE_CHURN_MIN_CHANGES) return null;
+
+  const severity = scopeChanges.length >= SCOPE_CHURN_MIN_CHANGES * 2 ? 'high' : 'medium';
+  const windowStart = windowStartDate(context.now, SCOPE_CHURN_WINDOW_DAYS);
+
+  return {
+    key: `scope-churn-rate:${target.id}:${windowStart.toISOString().slice(0, 10)}`,
+    title: `Scope churn risk: ${target.title}`,
+    severity,
+    kind: 'scope_drift',
+    confidence: 0.74,
+    summary: `${scopeChanges.length} scope-related changes landed in the last ${SCOPE_CHURN_WINDOW_DAYS} days.`,
+    rationale: 'Frequent scope, estimate, priority, title, or issue-association changes can hide delivery risk even when individual updates look reasonable.',
+    targetDocumentId: target.id,
+    targetDocumentType: target.documentType,
+    ownerUserId: readString(target.properties.owner_id)
+      ?? readString(target.properties.accountable_id),
+    evidence: [
+      recordToEvidence(target, `${scopeChanges.length} scope-related history entries were found in the recent window.`),
+      ...scopeChanges.slice(0, 4).map(historyToEvidence),
+    ],
+  };
+}
+
+export function detectRaciDrift(context: FleetGraphContext): FleetGraphFindingCandidate | null {
+  const target = context.project ?? context.program ?? context.week;
+  if (!target) return null;
+
+  const relatedDocumentIds = new Set([
+    target.id,
+    ...context.issues.map((issue) => issue.id),
+  ]);
+  const raciChanges = recentHistory(context, RACI_DRIFT_WINDOW_DAYS)
+    .filter((entry) => relatedDocumentIds.has(entry.documentId))
+    .filter(isRaciChange);
+  if (raciChanges.length < RACI_DRIFT_MIN_CHANGES) return null;
+
+  const severity = raciChanges.length >= RACI_DRIFT_MIN_CHANGES * 2 ? 'high' : 'medium';
+  const windowStart = windowStartDate(context.now, RACI_DRIFT_WINDOW_DAYS);
+
+  return {
+    key: `raci-drift:${target.id}:${windowStart.toISOString().slice(0, 10)}`,
+    title: `RACI drift: ${target.title}`,
+    severity,
+    kind: 'planning_gap',
+    confidence: 0.73,
+    summary: `${raciChanges.length} ownership or accountability changes occurred in the last ${RACI_DRIFT_WINDOW_DAYS} days.`,
+    rationale: 'Repeated owner, accountable, responsible, or assignee changes can make delivery responsibility unclear enough to warrant review.',
+    targetDocumentId: target.id,
+    targetDocumentType: target.documentType,
+    ownerUserId: readString(target.properties.owner_id)
+      ?? readString(target.properties.accountable_id),
+    evidence: [
+      recordToEvidence(target, `${raciChanges.length} RACI-related history entries were found in the recent window.`),
+      ...raciChanges.slice(0, 4).map(historyToEvidence),
+    ],
+  };
+}
+
 function isActiveWeek(week: FleetGraphRecordRef, nowIso: string): boolean {
   const explicitStatus = readString(week.properties.sprint_status) ?? readString(week.properties.status);
   if (explicitStatus === 'active') return true;
@@ -302,6 +491,59 @@ function readMilestoneDate(record: FleetGraphRecordRef): Date | null {
     ?? readDate(record.properties.due_date)
     ?? readDate(record.properties.planned_end_date)
     ?? readDate(record.properties.end_date);
+}
+
+function recentHistory(context: FleetGraphContext, windowDays: number): FleetGraphHistoryRef[] {
+  const windowStart = windowStartDate(context.now, windowDays);
+  return context.history.filter((entry) => {
+    const createdAt = new Date(entry.createdAt);
+    return !Number.isNaN(createdAt.getTime()) && createdAt >= windowStart;
+  });
+}
+
+function isScopeChange(entry: FleetGraphHistoryRef): boolean {
+  const field = entry.field.trim().toLowerCase();
+  return [
+    'belongs_to',
+    'content',
+    'description',
+    'estimate',
+    'estimate_hours',
+    'estimated_hours',
+    'planned_scope',
+    'priority',
+    'scope',
+    'state',
+    'title',
+  ].includes(field);
+}
+
+function isRaciChange(entry: FleetGraphHistoryRef): boolean {
+  const field = entry.field.trim().toLowerCase();
+  return [
+    'accountable_id',
+    'assignee_id',
+    'consulted_ids',
+    'informed_ids',
+    'owner_id',
+    'raci',
+    'responsible_id',
+  ].includes(field);
+}
+
+function historyToEvidence(entry: FleetGraphHistoryRef) {
+  return {
+    sourceType: 'timeline' as const,
+    sourceId: entry.documentId,
+    title: entry.documentTitle,
+    excerpt: `${entry.field} changed from ${entry.oldValue ?? 'empty'} to ${entry.newValue ?? 'empty'} on ${entry.createdAt.slice(0, 10)}.`,
+    url: `/documents/${entry.documentId}`,
+  };
+}
+
+function windowStartDate(nowIso: string, windowDays: number): Date {
+  const now = new Date(nowIso);
+  return new Date(now.getTime() - windowDays * 24 * 60 * 60 * 1000);
 }
 
 function startOfDay(date: Date): Date {

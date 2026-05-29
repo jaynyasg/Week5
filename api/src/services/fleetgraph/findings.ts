@@ -17,6 +17,8 @@ export async function persistFleetGraphFinding(input: {
 
   const properties = {
     status: 'open',
+    detector_id: input.candidate.detectorId ?? null,
+    noise_default: input.candidate.noiseDefault ?? null,
     severity: input.candidate.severity,
     kind: input.candidate.kind,
     confidence: input.candidate.confidence,
@@ -200,6 +202,8 @@ async function updateExistingFleetGraphFinding(input: {
            || jsonb_build_object(
              'summary', $4::jsonb->>'summary',
              'rationale', $4::jsonb->>'rationale',
+             'detector_id', $4::jsonb->'detector_id',
+             'noise_default', $4::jsonb->'noise_default',
              'run_id', $4::jsonb->'run_id',
              'evidence', $4::jsonb->'evidence',
              'last_observed_at', $4::jsonb->>'last_observed_at'

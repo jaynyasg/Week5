@@ -124,6 +124,7 @@ export async function safeRunFleetGraph(input: Parameters<typeof runFleetGraph>[
           userId: input.userId ?? 'system',
           workspaceAdminUserIds: [],
           issues: [],
+          history: [],
           now: new Date().toISOString(),
         },
         message: input.message,

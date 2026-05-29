@@ -16,6 +16,7 @@ export interface FleetGraphRetentionSummary {
   failedEvents: number;
   runs: number;
   resolvedFindingsSoftDeleted: number;
+  costRollupRows: number;
   checkpointThreads: number;
   checkpointRows: {
     checkpoints: number;
@@ -84,6 +85,10 @@ export async function runFleetGraphRetention(
       cutoff: daysAgo(now, options.failedEventDays),
       dryRun: options.dryRun,
     });
+    const costRollupRows = await rollupPrunableRuns(client, {
+      cutoff: daysAgo(now, options.runDays),
+      dryRun: options.dryRun,
+    });
     const checkpointThreadIds = await listPrunableCheckpointThreadIds(client, daysAgo(now, options.checkpointDays));
     const runs = await pruneRuns(client, {
       cutoff: daysAgo(now, options.runDays),
@@ -106,6 +111,7 @@ export async function runFleetGraphRetention(
       failedEvents,
       runs,
       resolvedFindingsSoftDeleted,
+      costRollupRows,
       checkpointThreads: checkpointThreadIds.length,
       checkpointRows,
       dryRun: options.dryRun,
@@ -116,6 +122,67 @@ export async function runFleetGraphRetention(
   } finally {
     client.release();
   }
+}
+
+async function rollupPrunableRuns(
+  client: PoolClient,
+  input: { cutoff: Date; dryRun: boolean },
+): Promise<number> {
+  const params = [input.cutoff.toISOString(), TERMINAL_RUN_STATUSES];
+  const whereSql = `
+    status = ANY($2::text[])
+    AND created_at < $1
+    AND NOT EXISTS (
+      SELECT 1
+      FROM fleetgraph_action_proposals proposal
+      WHERE proposal.run_id = fleetgraph_runs.id
+        AND proposal.status = 'pending'
+    )`;
+
+  if (input.dryRun) {
+    const result = await client.query<{ count: string }>(
+      `SELECT COUNT(*)::text AS count
+       FROM (
+         SELECT workspace_id, date_trunc('month', created_at)::date, mode,
+                COALESCE(provider, 'unknown'), COALESCE(model, 'unknown')
+         FROM fleetgraph_runs
+         WHERE ${whereSql}
+         GROUP BY workspace_id, date_trunc('month', created_at)::date, mode,
+                  COALESCE(provider, 'unknown'), COALESCE(model, 'unknown')
+       ) rollups`,
+      params,
+    );
+    return Number(result.rows[0]?.count ?? 0);
+  }
+
+  const result = await client.query(
+    `INSERT INTO fleetgraph_monthly_cost_rollups (
+       workspace_id, month, mode, provider, model, run_count,
+       input_tokens, output_tokens, estimated_cost_usd
+     )
+     SELECT workspace_id,
+            date_trunc('month', created_at)::date AS month,
+            mode,
+            COALESCE(provider, 'unknown') AS provider,
+            COALESCE(model, 'unknown') AS model,
+            COUNT(*)::integer AS run_count,
+            COALESCE(SUM(input_tokens), 0)::bigint AS input_tokens,
+            COALESCE(SUM(output_tokens), 0)::bigint AS output_tokens,
+            COALESCE(SUM(estimated_cost_usd), 0)::numeric(14, 6) AS estimated_cost_usd
+     FROM fleetgraph_runs
+     WHERE ${whereSql}
+     GROUP BY workspace_id, date_trunc('month', created_at)::date, mode,
+              COALESCE(provider, 'unknown'), COALESCE(model, 'unknown')
+     ON CONFLICT (workspace_id, month, mode, provider, model)
+     DO UPDATE SET
+       run_count = fleetgraph_monthly_cost_rollups.run_count + EXCLUDED.run_count,
+       input_tokens = fleetgraph_monthly_cost_rollups.input_tokens + EXCLUDED.input_tokens,
+       output_tokens = fleetgraph_monthly_cost_rollups.output_tokens + EXCLUDED.output_tokens,
+       estimated_cost_usd = fleetgraph_monthly_cost_rollups.estimated_cost_usd + EXCLUDED.estimated_cost_usd,
+       updated_at = now()`,
+    params,
+  );
+  return result.rowCount ?? 0;
 }
 
 async function pruneEventQueue(

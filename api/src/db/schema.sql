@@ -377,6 +377,22 @@ CREATE TABLE IF NOT EXISTS fleetgraph_runs (
   completed_at TIMESTAMPTZ
 );
 
+CREATE TABLE IF NOT EXISTS fleetgraph_monthly_cost_rollups (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  month DATE NOT NULL,
+  mode TEXT NOT NULL CHECK (mode IN ('proactive', 'chat', 'manual')),
+  provider TEXT NOT NULL DEFAULT 'unknown',
+  model TEXT NOT NULL DEFAULT 'unknown',
+  run_count INTEGER NOT NULL DEFAULT 0 CHECK (run_count >= 0),
+  input_tokens BIGINT NOT NULL DEFAULT 0 CHECK (input_tokens >= 0),
+  output_tokens BIGINT NOT NULL DEFAULT 0 CHECK (output_tokens >= 0),
+  estimated_cost_usd NUMERIC(14, 6) NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (workspace_id, month, mode, provider, model)
+);
+
 CREATE TABLE IF NOT EXISTS fleetgraph_deliveries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -576,6 +592,7 @@ CREATE INDEX IF NOT EXISTS idx_fleetgraph_event_queue_source_document ON fleetgr
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_runs_workspace_created ON fleetgraph_runs(workspace_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_runs_thread ON fleetgraph_runs(thread_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_runs_status ON fleetgraph_runs(workspace_id, status, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_fleetgraph_cost_rollups_workspace_month ON fleetgraph_monthly_cost_rollups(workspace_id, month DESC);
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_deliveries_user_status ON fleetgraph_deliveries(user_id, status, delivered_at DESC);
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_deliveries_finding ON fleetgraph_deliveries(finding_document_id);
 CREATE INDEX IF NOT EXISTS idx_fleetgraph_deliveries_workspace_status ON fleetgraph_deliveries(workspace_id, status, delivered_at DESC);

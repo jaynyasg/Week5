@@ -15,16 +15,19 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
 const fleetGraphDocumentTypeMigrationPath = resolve(__dirname, '../../db/migrations/048_fleetgraph_foundation.sql');
 const fleetGraphTablesMigrationPath = resolve(__dirname, '../../db/migrations/049_fleetgraph_foundation_tables.sql');
+const fleetGraphCostRollupsMigrationPath = resolve(__dirname, '../../db/migrations/052_fleetgraph_cost_rollups.sql');
 const NOW = new Date('2026-05-29T12:00:00.000Z');
 
 describe('FleetGraph retention', () => {
   beforeAll(async () => {
     await pool.query(await readFile(fleetGraphDocumentTypeMigrationPath, 'utf8'));
     await pool.query(await readFile(fleetGraphTablesMigrationPath, 'utf8'));
+    await pool.query(await readFile(fleetGraphCostRollupsMigrationPath, 'utf8'));
   });
 
   afterEach(async () => {
     await pool.query(`TRUNCATE TABLE
+      fleetgraph_monthly_cost_rollups,
       fleetgraph_action_proposals, fleetgraph_event_queue, fleetgraph_runs,
       fleetgraph_deliveries, documents, workspace_memberships, users, workspaces
       CASCADE`);
@@ -58,6 +61,7 @@ describe('FleetGraph retention', () => {
     expect(summary).toMatchObject({
       completedEvents: 1,
       failedEvents: 1,
+      costRollupRows: 1,
       runs: 1,
       resolvedFindingsSoftDeleted: 1,
       checkpointThreads: 1,
@@ -67,6 +71,7 @@ describe('FleetGraph retention', () => {
     await expectEventToExist(data.oldCompletedEventId);
     await expectRunToExist(data.oldTerminalRunId);
     await expectFindingDeletedAt(data.resolvedFindingId, null);
+    await expectCostRollupRows(0);
   });
 
   it('prunes old terminal history while preserving active work and human gates', async () => {
@@ -77,6 +82,7 @@ describe('FleetGraph retention', () => {
     expect(summary).toMatchObject({
       completedEvents: 1,
       failedEvents: 1,
+      costRollupRows: 1,
       runs: 1,
       resolvedFindingsSoftDeleted: 1,
       checkpointThreads: 1,
@@ -90,6 +96,13 @@ describe('FleetGraph retention', () => {
     await expectRunToBeDeleted(data.oldTerminalRunId);
     await expectRunToExist(data.pendingGateRunId);
     await expectRunToExist(data.startedRunId);
+    await expectHistoricalProposalRetained(data.historicalProposalId);
+    await expectCostRollup({
+      runCount: 1,
+      inputTokens: 1000,
+      outputTokens: 250,
+      estimatedCostUsd: '0.000300',
+    });
     await expectFindingDeletedAt(data.resolvedFindingId, expect.any(Date));
     await expectFindingDeletedAt(data.openFindingId, null);
   });
@@ -103,6 +116,7 @@ async function seedRetentionData(): Promise<{
   oldTerminalRunId: string;
   pendingGateRunId: string;
   startedRunId: string;
+  historicalProposalId: string;
   resolvedFindingId: string;
   openFindingId: string;
 }> {
@@ -185,11 +199,31 @@ async function seedRetentionData(): Promise<{
   const startedRunId = runResult.rows.find((row) => row.thread_id.startsWith('thread-started'))!.id;
 
   await pool.query(
+    `UPDATE fleetgraph_runs
+     SET provider = 'openai',
+         model = 'gpt-4o-mini',
+         input_tokens = 1000,
+         output_tokens = 250,
+         estimated_cost_usd = 0.000300
+     WHERE id = $1`,
+    [oldTerminalRunId],
+  );
+
+  await pool.query(
     `INSERT INTO fleetgraph_action_proposals (
        workspace_id, finding_document_id, run_id, proposed_action, target_document_id, payload, status
      )
      VALUES ($1, $2, $3, 'request_update', $2, '{}', 'pending')`,
     [workspaceId, openFindingId, pendingGateRunId],
+  );
+  const historicalProposalResult = await pool.query<{ id: string }>(
+    `INSERT INTO fleetgraph_action_proposals (
+       workspace_id, finding_document_id, run_id, proposed_action, target_document_id, payload, status,
+       decided_by_user_id, decided_at, decision_note
+     )
+     VALUES ($1, $2, $3, 'request_update', $2, '{}', 'rejected', $4, $5, 'Already handled')
+     RETURNING id`,
+    [workspaceId, resolvedFindingId, oldTerminalRunId, userId, daysAgo(119).toISOString()],
   );
 
   return {
@@ -200,9 +234,62 @@ async function seedRetentionData(): Promise<{
     oldTerminalRunId,
     pendingGateRunId,
     startedRunId,
+    historicalProposalId: historicalProposalResult.rows[0]!.id,
     resolvedFindingId,
     openFindingId,
   };
+}
+
+async function expectCostRollupRows(count: number): Promise<void> {
+  const result = await pool.query<{ count: string }>(
+    'SELECT COUNT(*)::text AS count FROM fleetgraph_monthly_cost_rollups',
+  );
+  expect(Number(result.rows[0]?.count ?? 0)).toBe(count);
+}
+
+async function expectCostRollup(expected: {
+  runCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  estimatedCostUsd: string;
+}): Promise<void> {
+  const result = await pool.query<{
+    month: Date;
+    mode: string;
+    provider: string;
+    model: string;
+    run_count: number;
+    input_tokens: string;
+    output_tokens: string;
+    estimated_cost_usd: string;
+  }>(
+    `SELECT month, mode, provider, model, run_count, input_tokens, output_tokens, estimated_cost_usd
+     FROM fleetgraph_monthly_cost_rollups`,
+  );
+
+  expect(result.rows).toHaveLength(1);
+  expect(result.rows[0]).toMatchObject({
+    mode: 'proactive',
+    provider: 'openai',
+    model: 'gpt-4o-mini',
+    run_count: expected.runCount,
+    input_tokens: String(expected.inputTokens),
+    output_tokens: String(expected.outputTokens),
+    estimated_cost_usd: expected.estimatedCostUsd,
+  });
+}
+
+async function expectHistoricalProposalRetained(proposalId: string): Promise<void> {
+  const result = await pool.query<{ run_id: string | null; status: string }>(
+    `SELECT run_id, status
+     FROM fleetgraph_action_proposals
+     WHERE id = $1`,
+    [proposalId],
+  );
+  expect(result.rows[0]).toEqual({
+    run_id: null,
+    status: 'rejected',
+  });
 }
 
 function retentionOptions(overrides: Partial<FleetGraphRetentionOptions>): FleetGraphRetentionOptions {

@@ -127,17 +127,21 @@ The latency target is less than 5 minutes from Ship event to surfaced finding. T
 
 ### Detector Catalog
 
-FleetGraph detectors are plain functions in `api/src/services/fleetgraph/detectors.ts` that read the Ship evidence bundle and return finding candidates. The graph can add more detectors without changing the queue, persistence, or UI contracts.
+FleetGraph detectors are plain functions in `api/src/services/fleetgraph/detectors.ts` that read the Ship evidence bundle and return finding candidates. The graph can add more detectors without changing the queue, persistence, or UI contracts. Each detector is registered in `fleetGraphDetectorRegistry` with metadata for detector ID, kind, default severity, notification/noise default, and history window when applicable.
 
 Implemented detectors:
 
-- Planning gap: active week without an approved plan signal.
-- Approved-plan drift: approved weekly plan changed after approval, routed through HITL.
-- Ownership gap: project or program missing owner/accountable metadata.
-- Stale issue: active issue has not been updated for the stale threshold.
-- Project churn: multiple stale active issues in one project.
-- Overdue milestone: active project or week target/due/end date is in the past.
-- Workload imbalance: one owner has a materially higher active issue load than peers.
+| Detector ID | Signal | Default severity | Noise default |
+|---|---|---:|---|
+| `missing-approved-plan` | Active week without an approved plan signal | High | Toast |
+| `approved-plan-drift` | Approved weekly plan changed after approval, routed through HITL | Medium | Badge |
+| `missing-ownership` | Project or program missing owner/accountable metadata | Medium | Badge |
+| `stale-issue` | Active issue has not been updated for 7 days | Medium | Badge |
+| `project-churn` | Multiple stale active issues in one project | High | Toast |
+| `overdue-milestone` | Active project or week target/due/end date is in the past | Medium | Badge |
+| `workload-imbalance` | One owner has materially higher active issue load than peers | Medium | Badge |
+| `scope-churn-rate` | Scope, estimate, priority, title, content, or association history changes repeatedly inside 14 days | Medium | Badge |
+| `raci-drift` | Owner/accountable/responsible/assignee history changes repeatedly inside 30 days | Medium | Badge |
 
 ### Graph Persistence
 
@@ -164,7 +168,10 @@ Default retention windows:
 | Completed queue events | 14 days | Deleted after the queue event is terminal and old enough |
 | Failed queue events | 90 days | Retained longer for debugging, then deleted |
 | Terminal runs | 90 days | Deleted only when status is completed, failed, or cancelled and no pending action proposal references the run |
+| Monthly cost rollups | Indefinite | Terminal run cost/token totals are upserted into `fleetgraph_monthly_cost_rollups` before run pruning |
 | Resolved/dismissed findings | 180 days | Soft-deleted through `documents.deleted_at`; open, acknowledged, and pending-gate findings are retained |
+| HITL proposals | At least 1 year; current implementation keeps indefinitely | Retained for audit even when old terminal run rows are pruned; `run_id` becomes null through `ON DELETE SET NULL` |
+| Deliveries | Kept with finding lifecycle | Delivery rows cascade only when the finding document is hard-deleted; soft-deleted findings preserve delivery history |
 | LangGraph checkpoints | 90 days | Checkpoint rows for terminal FleetGraph threads are deleted after pending HITL gates are excluded |
 
 The windows are configurable with `SHIP_FLEETGRAPH_RETENTION_COMPLETED_EVENTS_DAYS`, `SHIP_FLEETGRAPH_RETENTION_FAILED_EVENTS_DAYS`, `SHIP_FLEETGRAPH_RETENTION_RUNS_DAYS`, `SHIP_FLEETGRAPH_RETENTION_RESOLVED_FINDINGS_DAYS`, `SHIP_FLEETGRAPH_RETENTION_CHECKPOINTS_DAYS`, and `SHIP_FLEETGRAPH_RETENTION_DRY_RUN`.
@@ -204,6 +211,14 @@ Post-review design completeness: 8/10.
 Visual mockups added on 2026-05-29: [`docs/fleetgraph-visual-mockups.md`](docs/fleetgraph-visual-mockups.md). The mockups cover the drawer inbox, finding detail, HITL approval gate, notification preferences, and mobile drill-in states.
 
 The plan now specifies the high-risk UI surfaces that would otherwise be left to implementation guesswork: the FleetGraph drawer hierarchy, finding states, notification behavior, action proposal gates, and mobile/accessibility constraints.
+
+#### Design Review Completion
+
+| Review item | Completion evidence |
+|---|---|
+| More detection types | Added overdue milestone, workload imbalance, scope churn rate, and RACI drift detectors; registry metadata defines IDs, default severity, noise defaults, and history windows. |
+| Visual mockups | Added five mockups plus state matrices for inbox rows and approval gates in `docs/fleetgraph-visual-mockups.md`. |
+| Long-term retention policy | Added daily retention command, monthly cost rollups, terminal run pruning, resolved-finding soft delete, checkpoint cleanup, and audit retention for HITL proposals. |
 
 #### What Already Exists To Reuse
 
@@ -474,8 +489,8 @@ flowchart TD
 |---|---|---|---|
 | Trigger | Entry | FleetGraph event queue, scheduled sweep, or authenticated chat request | Initial graph state with mode, workspace, user, route, trigger, and thread IDs |
 | Normalize context | Context node | Request payload, queue payload, route context | Canonical target document, trigger type, idempotency key, and graph mode |
-| Load Ship context | Data node | Real Ship workspace, document, project, week, issue, timeline, accountability, and association rows | Evidence bundle used by downstream decision nodes |
-| Detect conditions | Decision node | Evidence bundle | Candidate detections for planning gaps, stale issues, project churn, approval drift, ownership gaps, overdue milestones, workload imbalance, and contextual chat |
+| Load Ship context | Data node | Real Ship workspace, document, project, week, issue, timeline, accountability, association, and `document_history` rows | Evidence bundle used by downstream decision nodes |
+| Detect conditions | Decision node | Evidence bundle | Candidate detections for planning gaps, stale issues, project churn, approval drift, ownership gaps, overdue milestones, workload imbalance, scope churn, RACI drift, and contextual chat |
 | Rank and route | Decision node | Candidate detections and user/audience rules | Severity, notification audience, and whether mutation is proposed |
 | Persist finding | Side-effect node | Approved finding candidate | `fleetgraph_finding` document, document associations, delivery rows, audit metadata |
 | HITL proposal | Interrupt node | Proposed mutation and evidence | `fleetgraph_action_proposals` row and LangGraph interrupt/checkpoint |
@@ -503,12 +518,16 @@ flowchart TD
 | 4 | PM | An approved plan changes after approval | HITL action proposal and interrupted graph run for review/re-approval handling | Required before any approval, unapproval, comment, or status mutation |
 | 5 | Director | A project has missing owner/accountable metadata | Ownership-gap finding listing the affected project and suggesting ownership confirmation | Required before changing RACI/ownership fields |
 | 6 | User | A signed-in user opens FleetGraph from a project or week route | Context-aware answer grounded in the current Ship view and recent FleetGraph evidence | Required before executing any mutation proposed from chat |
+| 7 | PM | A project or week target/due/end date is past and the work is still active | Overdue-milestone finding with owner routing and date evidence | Required before changing milestone date, status, scope, or owner |
+| 8 | Manager | Active issue count or estimated effort is concentrated on one assignee | Workload-imbalance finding with top assigned issues and effort evidence | Required before reassigning work or changing estimates |
+| 9 | Director | Recent `document_history` shows repeated scope, estimate, priority, title, content, or association changes | Scope-churn finding explaining the change rate and citing the recent history entries | Required before changing scope, priorities, or plan content |
+| 10 | Director | Recent `document_history` shows repeated owner/accountable/responsible/assignee changes | RACI-drift finding explaining responsibility instability and citing the recent history entries | Required before changing RACI/ownership fields |
 
 ## Test Cases
 
-All traces were generated from real Ship rows in the Week5 local database and shared from LangSmith on 2026-05-26. Proactive traces were produced by the FleetGraph drain path against queued Ship events or sweep-detected state; the chat trace was produced by the authenticated FleetGraph UI/API path.
+The MVP trace links below were generated from real Ship rows in the Week5 local database and shared from LangSmith on 2026-05-26. Proactive traces were produced by the FleetGraph drain path against queued Ship events or sweep-detected state; the chat trace was produced by the authenticated FleetGraph UI/API path. The four post-MVP detector expansion rows are covered by deterministic local detector tests and are ready for trace capture once seeded in a traced Ship environment.
 
-| # | Ship State | Expected Output | Trace Link |
+| # | Ship State | Expected Output | Trace / Verification |
 |---|---|---|---|
 | 1 | A week planning document exists without an approved plan signal | Planning-gap finding delivered to the week owner/approver | [Trace](https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r); Ship run `f25df8ca-e643-45a7-bf6e-e4ca21bb902d` |
 | 2 | Project `FleetGraph Real Project Churn 20260526134152` has repeated stalled issue evidence | Project risk finding with issue/timeline evidence and delivery rows | [Trace](https://smith.langchain.com/public/20ab9844-8802-4a2e-90ed-230a95e18841/r); Ship run `d6ee3577-6f3a-4c83-ad19-61cf7cc3b573` |
@@ -516,6 +535,10 @@ All traces were generated from real Ship rows in the Week5 local database and sh
 | 4 | An approved plan changes after approval | HITL action proposal, graph interrupted awaiting human decision | [Trace](https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r); Ship run `2328e746-019a-46cd-896f-1dc3a51ea045` |
 | 5 | Project `FleetGraph Real Missing Ownership 20260526134152` has missing owner/accountable metadata | Ownership-gap finding listing the affected project and suggesting ownership confirmation | [Trace](https://smith.langchain.com/public/abb91b0a-f975-4750-9f2e-3fccb5bad600/r); Ship run `6881c404-dc84-4769-b78f-271337fc91f5` |
 | 6 | A signed-in user opens FleetGraph from a project or week route | Context-aware answer grounded in the current Ship view and recent FleetGraph evidence | [Trace](https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r); Ship run `8ff69405-894c-4cc4-a7bc-3a1a2dd04764` |
+| 7 | Active project has `target_date`, `due_date`, `planned_end_date`, or `end_date` in the past | Overdue-milestone finding with target date evidence | Local detector coverage: `api/src/services/fleetgraph/detectors.test.ts` |
+| 8 | Active issue estimates/counts are concentrated on one assignee relative to peers | Workload-imbalance finding with top issue evidence | Local detector coverage: `api/src/services/fleetgraph/detectors.test.ts` |
+| 9 | Related project/week/issue/plan `document_history` has at least 5 scope-related changes in 14 days | Scope-churn finding with timeline evidence | Local detector coverage: `api/src/services/fleetgraph/detectors.test.ts` |
+| 10 | Related project/program/week/issue `document_history` has at least 3 RACI-related changes in 30 days | RACI-drift finding with timeline evidence | Local detector coverage: `api/src/services/fleetgraph/detectors.test.ts` |
 
 ## Human-in-the-Loop Experience
 
@@ -686,9 +709,9 @@ Current deterministic evidence:
 - `web/src/components/assistant/AskShipPanel.test.tsx`, `web/src/components/assistant/fleetgraph/FleetGraphPanel.test.tsx`, and `web/src/components/ui/Toast.test.tsx` verify the FleetGraph drawer's mobile full-width class contract, 44px mobile action targets, and mobile toast offset above the pinned composer.
 - `api/src/services/fleetgraph/graph.test.ts`, included in `pnpm --filter @ship/api test:fleetgraph-eval`, verifies the compiled LangGraph workflow can checkpoint an approval interrupt with `MemorySaver` and resume with a human decision.
 - `api/src/scripts/fleetgraph-drain.test.ts`, included in `pnpm --filter @ship/api test:fleetgraph-eval`, verifies the scheduled drain command keeps local drain-only defaults and parses Render sweep settings for proactive backstop coverage.
-- `api/src/services/fleetgraph/detectors.test.ts` verifies the detector catalog, including overdue milestones and workload imbalance.
-- `api/src/services/fleetgraph/retention.test.ts` verifies configurable retention windows, dry-run reporting, terminal history pruning, resolved-finding soft delete, and preservation of active work/HITL gates.
-- `api/src/services/fleetgraph/eval-harness.test.ts` scores all six PRD use cases plus the no-finding branch: week planning gap, project churn/stalled issues, stale engineer issue, approved-plan-change HITL, missing ownership, context chat, and no-finding.
+- `api/src/services/fleetgraph/detectors.test.ts` verifies the detector registry metadata plus all nine detector paths, including overdue milestones, workload imbalance, scope churn rate, and RACI drift.
+- `api/src/services/fleetgraph/retention.test.ts` verifies configurable retention windows, dry-run reporting, monthly cost rollups before run pruning, terminal history pruning, resolved-finding soft delete, retained historical HITL proposals, and preservation of active work/HITL gates.
+- `api/src/services/fleetgraph/eval-harness.test.ts` scores the six PRD use cases plus the no-finding branch; the expanded detector tests cover the four added post-MVP detector paths.
 - DB-backed validation completed against isolated Docker Postgres on 2026-05-26: `pnpm --filter @ship/api test:fleetgraph-api` passed 22 tests, and the focused FleetGraph OpenAPI/route run passed 17 tests.
 - FleetGraph E2E completed on 2026-05-26 with `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1`: 2 passed, including the timed event-to-finding path under the 5 minute requirement.
 - Public Render latency verification completed on 2026-05-27: real Ship sprint `146712c1-ac7b-4569-81cf-b459b1fbbdc0` produced delivered planning-gap finding `31c7618c-47e6-4c4e-8395-862ffe4ad3f6` in 15.3 seconds, with deployed run `2fadd444-48ff-4515-8e0d-47d56c9788ff` recording proactive mode, trigger `document.created`, token counts, and estimated cost.

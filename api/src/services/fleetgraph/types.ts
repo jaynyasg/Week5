@@ -80,6 +80,18 @@ export interface FleetGraphIssueRef extends FleetGraphRecordRef {
   priority: string | null;
 }
 
+export interface FleetGraphHistoryRef {
+  documentId: string;
+  documentType: string;
+  documentTitle: string;
+  field: string;
+  oldValue: string | null;
+  newValue: string | null;
+  changedBy: string | null;
+  automatedBy: string | null;
+  createdAt: string;
+}
+
 export interface FleetGraphContext {
   workspaceId: string;
   userId: string;
@@ -91,6 +103,7 @@ export interface FleetGraphContext {
   week?: FleetGraphRecordRef | null;
   weekPlan?: FleetGraphRecordRef | null;
   issues: FleetGraphIssueRef[];
+  history: FleetGraphHistoryRef[];
   now: string;
 }
 
@@ -111,6 +124,8 @@ export interface FleetGraphActionProposalCandidate {
 
 export interface FleetGraphFindingCandidate {
   key: string;
+  detectorId?: string;
+  noiseDefault?: 'toast' | 'badge';
   title: string;
   severity: FleetGraphFindingSeverity;
   kind: FleetGraphFindingKind;

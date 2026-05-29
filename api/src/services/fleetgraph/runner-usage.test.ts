@@ -81,6 +81,7 @@ function state(overrides: Partial<FleetGraphState> = {}): FleetGraphState {
         assigneeId: 'owner-1',
         priority: 'high',
       }],
+      history: [],
       now: '2026-05-25T00:00:00.000Z',
     },
     findings: [],

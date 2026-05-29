@@ -129,6 +129,7 @@ function context(overrides: Partial<FleetGraphContext> = {}): FleetGraphContext 
     userId: 'user-1',
     workspaceAdminUserIds: ['admin-1'],
     issues: [],
+    history: [],
     now: '2026-05-25T00:00:00.000Z',
     ...overrides,
   };

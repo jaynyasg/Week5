@@ -4,6 +4,13 @@ Last updated: 2026-05-29
 
 These mockups capture the implemented FleetGraph drawer hierarchy, finding states, notification preferences, and human approval gate. They are intentionally low-fidelity so the repo can keep the UI contract close to the implementation without adding a separate design-tool dependency.
 
+Approved direction:
+
+- Keep FleetGraph inside the existing Ask Ship drawer.
+- Use compact operational rows, not a marketing-style AI surface.
+- Keep all mutation paths behind the approval gate.
+- Treat notification preferences as a small settings surface inside FleetGraph, not a separate notification center.
+
 ## Drawer: Findings Inbox
 
 ```text
@@ -35,6 +42,16 @@ Behavior:
 - The unread badge is driven by per-user delivery rows.
 - Current route context filters the first view before global findings.
 - Empty/error/loading states use the same row heights to avoid drawer jump.
+
+State coverage:
+
+| State | Row treatment | Primary action |
+|---|---|---|
+| Unread | Stronger severity marker, unread label, contributes to badge | Open detail |
+| Read | Normal text weight, no unread label | Open detail |
+| Snoozed | Snooze-until text replaces age when active | Unsnooze or open detail |
+| Dismissed | Hidden from default inbox; visible in filtered audit view | Reopen when allowed |
+| Action pending | Action label visible beside status | Open approval gate |
 
 ## Drawer: Finding Detail
 
@@ -92,6 +109,15 @@ Behavior:
 - Approve/reject submit through authenticated action-decision routes.
 - Unauthorized users see the proposal and evidence, but controls stay read-only.
 - Submission errors stay inside the proposal block.
+
+Approval states:
+
+| State | UI treatment |
+|---|---|
+| Pending | Approve and Reject enabled for authorized users |
+| Approved | Decision note, approver, and timestamp replace action buttons |
+| Rejected | Rejection note remains visible with evidence |
+| Failed | Error message stays inside the approval block with retry when safe |
 
 ## Notification Preferences
 
