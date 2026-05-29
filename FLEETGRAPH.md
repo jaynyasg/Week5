@@ -536,6 +536,8 @@ flowchart TD
 
 ## Test Cases
 
+Each row in this table validates the matching row in the Use Cases table above: test case 1 covers use case 1, test case 2 covers use case 2, and so on through the expansion detector cases.
+
 Evidence is split into two groups so graders can tell what was captured as public trace evidence and what was added later as design-review expansion work.
 
 - MVP rows 1-6 have shared LangSmith trace links generated from real Ship rows in the Week5 local database on 2026-05-26. Proactive traces came from the FleetGraph drain path against queued Ship events or sweep-detected state; the chat trace came from the authenticated FleetGraph UI/API path.
@@ -703,17 +705,23 @@ Assumptions:
 
 The current public Render URL from the FleetGraph submission docs is `https://ship-wf2i.onrender.com`.
 
-Public checks run on 2026-05-27 after the Render deployment of the current FleetGraph build:
+Public checks were rerun against the deployed Render URL on 2026-05-29 at `20:15:16Z`:
 
 | Check | Result |
 |---|---|
 | `GET /health` | `200`, body `{"status":"ok"}` |
-| `GET /api/fleetgraph/status` | `200`; `enabled: true`, `available: true`, provider `openai`, model `gpt-4o-mini`, proactive enabled, LangSmith tracing enabled, runtime marker `targeted-event-v1` / `self-healing-v1` |
-| `GET /api/fleetgraph/findings` | `200`; delivered findings returned for the authenticated user |
-| Public timed latency run | Real Ship sprint document `146712c1-ac7b-4569-81cf-b459b1fbbdc0` was created at `2026-05-27T03:47:01.2066111Z`; FleetGraph surfaced finding `31c7618c-47e6-4c4e-8395-862ffe4ad3f6` on the first poll at 15.3 seconds |
-| Deployed run metadata | Run `2fadd444-48ff-4515-8e0d-47d56c9788ff` completed as proactive `document.created`, provider `openai`, model `gpt-4o-mini`, 1,050 input tokens, 245 output tokens, estimated cost `$0.000305` |
+| `GET /` | `200`, `text/html; charset=UTF-8`, app root present |
+| `GET /api/setup/status` | `200`, `success: true`, `needsSetup: false` |
+| Auth flow | `GET /api/csrf-token` returned `200` with token; `POST /api/auth/login` returned `200`; `GET /api/auth/me` returned `200` with authenticated user |
+| `GET /api/fleetgraph/status` | `200`; `enabled: true`, `available: true`, provider `openai`, model `gpt-4o-mini`, proactive enabled with 60s sweep interval and 25 max events per sweep, LangSmith tracing enabled, runtime marker `targeted-event-v1` / `self-healing-v1` |
+| FleetGraph queue status | `200` status response included queue counts: `completed: 20`, `retrying: 4`, `queued: 3`; recent completed events include the deployed expansion detector runs from 2026-05-29 |
+| `GET /api/fleetgraph/findings` | `200`; 5 findings returned for the authenticated user, including `RACI drift: FleetGraph Trace RACI 20260529190740`, `Scope churn risk: FleetGraph Trace Scope 20260529190740`, and `Workload imbalance: 0e546399-8743-4842-bd0e-fb2ec9d7cce3` |
 
-Render configuration includes the FleetGraph web env vars and the `ship-fleetgraph-drain` cron job. Public health, authenticated FleetGraph status, findings retrieval, proactive event-to-finding delivery, and deployed run cost metadata are verified on the Render URL.
+The public URL is serving the current FleetGraph build: the deployed app responds on FleetGraph status and findings routes, authenticates through the production auth flow, reports OpenAI `gpt-4o-mini` with LangSmith tracing enabled, and returns current FleetGraph findings created by the deployed detector expansion runs.
+
+The timed latency evidence from 2026-05-27 still stands: real Ship sprint document `146712c1-ac7b-4569-81cf-b459b1fbbdc0` was created at `2026-05-27T03:47:01.2066111Z`; FleetGraph surfaced finding `31c7618c-47e6-4c4e-8395-862ffe4ad3f6` on the first poll at 15.3 seconds. Deployed run `2fadd444-48ff-4515-8e0d-47d56c9788ff` completed as proactive `document.created`, provider `openai`, model `gpt-4o-mini`, 1,050 input tokens, 245 output tokens, estimated cost `$0.000305`.
+
+Render configuration includes the FleetGraph web env vars and the `ship-fleetgraph-drain` cron job. Public health, frontend HTML, setup status, authenticated FleetGraph status, findings retrieval, proactive event-to-finding delivery, and deployed run cost metadata are verified on the Render URL.
 
 ## Test Plan
 
