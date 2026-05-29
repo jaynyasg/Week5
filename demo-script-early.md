@@ -6,7 +6,7 @@ Early Submission adds to MVP:
 - Test Cases: for each MVP use case, Ship state + expected output + LangSmith trace link.
 - Architecture Decisions: framework choice, node design rationale, state management, deployment model.
 
-Current docs note: the MVP evidence package has six public trace-backed use cases. The later design-review expansion adds four more detector cases with deterministic local verification plus deployed Ship runs mapped to LangSmith trace IDs; public trace sharing is a separate privacy-review step.
+Current docs note: the MVP evidence package has six public trace-backed use cases. The later design-review expansion adds four more detector cases with deterministic local verification plus deployed Ship runs and audited public LangSmith trace links.
 
 ## Before Recording
 
@@ -45,7 +45,7 @@ Scroll to the **Test Cases** section in `FLEETGRAPH.md`.
 
 Say:
 
-> The Test Cases section maps each MVP use case to the exact Ship state that triggers it, the expected output, and a shared LangSmith trace from a real run against that state. These are not hypothetical — every MVP trace was generated from real Ship rows. Rows seven through ten are the later detector-expansion cases, verified locally and also exercised on the deployed app with LangSmith trace IDs recorded after privacy review gating.
+> The Test Cases section maps each MVP use case to the exact Ship state that triggers it, the expected output, and a shared LangSmith trace from a real run against that state. These are not hypothetical — every MVP trace was generated from real Ship rows. Rows seven through ten are the later detector-expansion cases, verified locally and also exercised on the deployed app with audited public LangSmith trace links.
 
 Walk through three of the six rows, pausing on each:
 

@@ -79,7 +79,7 @@ The authenticated chat request includes the current route path, document ID, doc
 
 ### 2. Use Case Discovery
 
-Ten use cases are defined in FLEETGRAPH.md covering Director, PM, Engineer, Manager, and User roles. MVP rows 1-6 include the Ship state that triggers the agent, what the agent detects or produces, what the human decides, and a shared LangSmith trace from a real run. Expansion rows 7-10 document the additional detector work with deterministic local verification plus deployed Ship runs mapped to LangSmith trace IDs on 2026-05-29; public sharing remains gated on trace-payload review.
+Ten use cases are defined in FLEETGRAPH.md covering Director, PM, Engineer, Manager, and User roles. MVP rows 1-6 include the Ship state that triggers the agent, what the agent detects or produces, what the human decides, and a shared LangSmith trace from a real run. Expansion rows 7-10 document the additional detector work with deterministic local verification plus deployed Ship runs and audited shared LangSmith trace links captured on 2026-05-29.
 
 Summary of pain points discovered before implementation:
 

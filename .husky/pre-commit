@@ -10,6 +10,9 @@ fi
 
 # Open source compliance checks (secrets scan + AI analysis)
 if command -v comply &> /dev/null; then
+  export PYTHONUTF8=1
+  export PYTHONIOENCODING=utf-8
+
   if comply opensource --help >/dev/null 2>&1; then
     # NOTE: --skip-trivy is temporary workaround for compliance-toolkit bug
     # https://github.com/US-Department-of-the-Treasury/compliance-toolkit/issues/XXX

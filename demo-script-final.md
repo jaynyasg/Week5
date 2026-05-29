@@ -55,7 +55,7 @@ Scroll to the **Test Cases** section in `FLEETGRAPH.md`.
 
 Say:
 
-> The test table now has six MVP trace-backed use cases plus four design-review expansion detector cases. The MVP evidence has six shared LangSmith traces generated from real Ship rows, covering three distinct execution paths. The expansion rows document overdue milestones, workload imbalance, scope churn, and RACI drift with deterministic detector tests plus deployed Ship runs mapped to LangSmith trace IDs. Those expansion trace IDs are not public links until the trace payloads are reviewed for private project data.
+> The test table now has six MVP trace-backed use cases plus four design-review expansion detector cases. The MVP evidence has six shared LangSmith traces generated from real Ship rows, covering three distinct execution paths. The expansion rows document overdue milestones, workload imbalance, scope churn, and RACI drift with deterministic detector tests plus deployed Ship runs and audited public LangSmith trace links.
 
 Show the three key traces:
 
@@ -177,7 +177,7 @@ Return to the top of `FLEETGRAPH.md` and say:
 | **Cost analysis — production projections** | `FLEETGRAPH.md` → `Performance and Cost` → `Production Cost Projections` |
 | Different execution paths | Traces `129c549c`, `fdca7b9c`, `6a0f01b2` |
 | Human-in-the-loop gate | HITL trace `fdca7b9c`; `Human-in-the-Loop Experience` section |
-| Real Ship data | All six MVP traces from real Ship rows; expansion rows have deterministic tests plus deployed Ship/LangSmith trace IDs |
+| Real Ship data | All six MVP traces from real Ship rows; expansion rows have deterministic tests plus deployed Ship runs and audited public LangSmith traces |
 | Proactive detection end-to-end | Deployment Evidence; proactive trace `129c549c` |
 | Deployed and publicly accessible | `https://ship-wf2i.onrender.com` |
 | Detection latency under 5 minutes | Public timed run: 15.3 seconds |
