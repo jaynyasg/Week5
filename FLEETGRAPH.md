@@ -1,10 +1,21 @@
 # FleetGraph Design
 
-Last reviewed: 2026-05-26
+Last reviewed: 2026-05-29
 
 FleetGraph is Ship's project intelligence agent. It reads real Ship project state, reasons over program, project, week, issue, and accountability signals, and surfaces timely findings inside the existing Ship experience.
 
 This document is the working design contract for the Week 5 build. It is intentionally implementation-facing: if code behavior disagrees with this file, update the file or fix the code before submission.
+
+## Due
+
+Course due date: Tuesday, May 26, 2026 at 11:59 PM.
+
+Submission status:
+
+- MVP requirements are documented with real Ship data, public deployment evidence, shared LangSmith trace links, and a public timed latency run.
+- Final cost analysis is documented with measured FleetGraph run costs, token counts, and production projections for 100, 1,000, and 10,000 users.
+- Post-MVP design review improvements are documented and implemented: expanded detector registry, additional detector types, visual mockups/state matrices, notification preferences, and long-term retention/cost rollup policy.
+- Public LangSmith traces are complete for the MVP graph paths. The four added detector-expansion paths have deterministic local verification plus deployed Ship/LangSmith run evidence captured on 2026-05-29; public sharing is intentionally a separate review step because trace payloads can expose private project state.
 
 ## Agent Responsibility
 
@@ -525,7 +536,10 @@ flowchart TD
 
 ## Test Cases
 
-The MVP trace links below were generated from real Ship rows in the Week5 local database and shared from LangSmith on 2026-05-26. Proactive traces were produced by the FleetGraph drain path against queued Ship events or sweep-detected state; the chat trace was produced by the authenticated FleetGraph UI/API path. The four post-MVP detector expansion rows are covered by deterministic local detector tests and are ready for trace capture once seeded in a traced Ship environment.
+Evidence is split into two groups so graders can tell what was captured as public trace evidence and what was added later as design-review expansion work.
+
+- MVP rows 1-6 have shared LangSmith trace links generated from real Ship rows in the Week5 local database on 2026-05-26. Proactive traces came from the FleetGraph drain path against queued Ship events or sweep-detected state; the chat trace came from the authenticated FleetGraph UI/API path.
+- Expansion rows 7-10 document the additional detector types added after the MVP evidence package. They are covered by deterministic detector tests against Ship-shaped state and by deployed Ship runs mapped to LangSmith trace IDs on 2026-05-29.
 
 | # | Ship State | Expected Output | Trace / Verification |
 |---|---|---|---|
@@ -535,10 +549,40 @@ The MVP trace links below were generated from real Ship rows in the Week5 local 
 | 4 | An approved plan changes after approval | HITL action proposal, graph interrupted awaiting human decision | [Trace](https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r); Ship run `2328e746-019a-46cd-896f-1dc3a51ea045` |
 | 5 | Project `FleetGraph Real Missing Ownership 20260526134152` has missing owner/accountable metadata | Ownership-gap finding listing the affected project and suggesting ownership confirmation | [Trace](https://smith.langchain.com/public/abb91b0a-f975-4750-9f2e-3fccb5bad600/r); Ship run `6881c404-dc84-4769-b78f-271337fc91f5` |
 | 6 | A signed-in user opens FleetGraph from a project or week route | Context-aware answer grounded in the current Ship view and recent FleetGraph evidence | [Trace](https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r); Ship run `8ff69405-894c-4cc4-a7bc-3a1a2dd04764` |
-| 7 | Active project has `target_date`, `due_date`, `planned_end_date`, or `end_date` in the past | Overdue-milestone finding with target date evidence | Local detector coverage: `api/src/services/fleetgraph/detectors.test.ts` |
-| 8 | Active issue estimates/counts are concentrated on one assignee relative to peers | Workload-imbalance finding with top issue evidence | Local detector coverage: `api/src/services/fleetgraph/detectors.test.ts` |
-| 9 | Related project/week/issue/plan `document_history` has at least 5 scope-related changes in 14 days | Scope-churn finding with timeline evidence | Local detector coverage: `api/src/services/fleetgraph/detectors.test.ts` |
-| 10 | Related project/program/week/issue `document_history` has at least 3 RACI-related changes in 30 days | RACI-drift finding with timeline evidence | Local detector coverage: `api/src/services/fleetgraph/detectors.test.ts` |
+| 7 | Active project has `target_date`, `due_date`, `planned_end_date`, or `end_date` in the past | Overdue-milestone finding with target date evidence | Deployed Ship run `8fa07aee-957c-43eb-9ab3-7bf122f47d22`; LangSmith trace ID `019e7522-9584-72f4-9927-8aaa455ea000`; deterministic test: `detects overdue project milestones` |
+| 8 | Active issue estimates/counts are concentrated on one assignee relative to peers | Workload-imbalance finding with top issue evidence | Deployed Ship run `a6a8d9d9-e4fb-4f29-b71f-0d0bf54786ef`; LangSmith trace ID `019e7522-b29d-740e-975a-538f4fe98f43`; deterministic test: `detects workload imbalance across active issues` |
+| 9 | Related project/week/issue/plan `document_history` has at least 5 scope-related changes in 14 days | Scope-churn finding with timeline evidence | Deployed Ship run `03c7f2d8-0afe-43fd-8bd3-547c6bb620e7`; LangSmith trace ID `019e7522-ca3c-7027-a68c-197b15c00dfa`; deterministic test: `detects scope churn from document history changes` |
+| 10 | Related project/program/week/issue `document_history` has at least 3 RACI-related changes in 30 days | RACI-drift finding with timeline evidence | Deployed Ship run `efc9cae6-2d9c-4b40-bd71-a3e856086a70`; LangSmith trace ID `019e7522-e2d6-70cd-bbc9-38174d9904bc`; deterministic test: `detects RACI drift from ownership and assignment history` |
+
+### Expanded Detector Verification Details
+
+| Detector | Seeded Ship-shaped state | Expected finding key/output | Verification |
+|---|---|---|---|
+| `overdue-milestone` | Active project `project-1` has `target_date = 2026-05-10`; graph time is `2026-05-25T00:00:00.000Z` | `overdue-milestone:project-1:2026-05-10`, medium severity, `stale_commitment`, date evidence | `api/src/services/fleetgraph/detectors.test.ts` |
+| `workload-imbalance` | Project has multiple active issues assigned to `owner-1`, materially above peer load by count and estimate | `workload-imbalance:project-1:owner-1`, medium severity, top issue evidence | `api/src/services/fleetgraph/detectors.test.ts` |
+| `scope-churn-rate` | Related project, issues, and week plan have 5 scope-related `document_history` entries inside 14 days | `scope-churn-rate:project-1:2026-05-11`, medium severity, timeline evidence | `api/src/services/fleetgraph/detectors.test.ts` |
+| `raci-drift` | Project and issue history include 3 owner/accountable/assignee changes inside 30 days | `raci-drift:project-1:2026-04-25`, medium severity, timeline evidence | `api/src/services/fleetgraph/detectors.test.ts` |
+
+### Expansion External Evidence
+
+The expansion detectors were also seeded through the deployed Ship environment at `https://ship-wf2i.onrender.com` on 2026-05-29 with FleetGraph status reporting OpenAI `gpt-4o-mini` and LangSmith tracing enabled. The traces are intentionally recorded as LangSmith run/trace IDs, not public share links, until a human reviews the trace payloads for private project data.
+
+| Detector | Deployed Ship state | Finding | Ship run | LangSmith trace |
+|---|---|---|---|---|
+| `overdue-milestone` | Project `FleetGraph Trace Overdue 20260529190740` with `target_date = 2026-05-20` | `7e5e0ddf-a539-4bad-a3f6-fc2cf0bd794d`; high stale-commitment finding, 9 days overdue | `8fa07aee-957c-43eb-9ab3-7bf122f47d22` | `019e7522-9584-72f4-9927-8aaa455ea000` |
+| `workload-imbalance` | Project `FleetGraph Trace Workload 20260529190740` with 4 active issues assigned to one owner, 32 estimated hours | `9fc50ee3-4733-4b14-9774-5252b1d13127`; medium delivery-conflict finding | `a6a8d9d9-e4fb-4f29-b71f-0d0bf54786ef` | `019e7522-b29d-740e-975a-538f4fe98f43` |
+| `scope-churn-rate` | Project `FleetGraph Trace Scope 20260529190740` with 6 scope-related history changes in 14 days | `f035a861-ef49-49ed-9783-f31890e2e74e`; medium scope-drift finding | `03c7f2d8-0afe-43fd-8bd3-547c6bb620e7` | `019e7522-ca3c-7027-a68c-197b15c00dfa` |
+| `raci-drift` | Project `FleetGraph Trace RACI 20260529190740` with 3 assignee/accountability history changes in 30 days | `0a89f925-58af-481b-b351-4c3db179286f`; medium planning-gap finding | `efc9cae6-2d9c-4b40-bd71-a3e856086a70` | `019e7522-e2d6-70cd-bbc9-38174d9904bc` |
+
+### Expansion Public Trace Review Checklist
+
+To convert rows 7-10 from internal LangSmith trace IDs into public shared LangSmith links:
+
+1. Enable the traced Ship environment with `LANGSMITH_API_KEY`, `LANGSMITH_PROJECT`, `SHIP_FLEETGRAPH_ENABLED=true`, and `SHIP_FLEETGRAPH_TRACING_ENABLED=true`.
+2. Seed real Ship documents matching the state in the table above; do not use mock provider rows for submission evidence.
+3. Trigger FleetGraph through the normal event queue or scheduled sweep, then verify a completed `fleetgraph_runs` row with provider/model, tokens, cost, and a matching LangSmith root trace ID.
+4. Review each LangSmith trace for secrets, cookies, bearer tokens, and irrelevant personal data before sharing.
+5. After review, create public LangSmith share links and replace the trace-ID-only entries above with shared trace URLs.
 
 ## Human-in-the-Loop Experience
 
@@ -576,6 +620,13 @@ Shared LangSmith evidence captured on 2026-05-26:
 - HITL/action proposal path: [trace](https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r), Ship run `2328e746-019a-46cd-896f-1dc3a51ea045`, LangSmith trace `019e6553-20ef-779f-8273-c42d9ea4cd25`.
 - Missing ownership path: [trace](https://smith.langchain.com/public/abb91b0a-f975-4750-9f2e-3fccb5bad600/r), Ship run `6881c404-dc84-4769-b78f-271337fc91f5`, LangSmith trace `019e6598-3b86-77ae-be2d-bb1122b8c49c`.
 - On-demand chat path: [trace](https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r), Ship run `8ff69405-894c-4cc4-a7bc-3a1a2dd04764`, LangSmith trace `019e6552-9dd5-73a4-a7ba-7f6e65c967e6`.
+
+Deployed expansion evidence captured on 2026-05-29:
+
+- Overdue milestone path: Ship run `8fa07aee-957c-43eb-9ab3-7bf122f47d22`, LangSmith trace `019e7522-9584-72f4-9927-8aaa455ea000`.
+- Workload imbalance path: Ship run `a6a8d9d9-e4fb-4f29-b71f-0d0bf54786ef`, LangSmith trace `019e7522-b29d-740e-975a-538f4fe98f43`.
+- Scope churn path: Ship run `03c7f2d8-0afe-43fd-8bd3-547c6bb620e7`, LangSmith trace `019e7522-ca3c-7027-a68c-197b15c00dfa`.
+- RACI drift path: Ship run `efc9cae6-2d9c-4b40-bd71-a3e856086a70`, LangSmith trace `019e7522-e2d6-70cd-bbc9-38174d9904bc`.
 
 ## Performance and Cost
 
@@ -678,7 +729,7 @@ Required implementation tests:
 - UI tests for empty, loading, error, unavailable, missing evidence, snoozed, dismissed, rejected action, action-error, and trace-present/missing states.
 - Accessibility checks for keyboard navigation, focus order, live regions, and contrast in the FleetGraph drawer; component-level live-region and row-label coverage is in place.
 - Mobile checks for full-screen drawer behavior, touch targets, and composer/toast overlap; component-level responsive contract coverage is in place.
-- Trace validation with six shared LangSmith links before submission.
+- Trace validation with six shared MVP LangSmith links before submission; expansion detector rows have deterministic tests plus deployed LangSmith trace IDs and the public-share review checklist above.
 
 ### Current Implementation Validation
 
@@ -711,7 +762,7 @@ Current deterministic evidence:
 - `api/src/scripts/fleetgraph-drain.test.ts`, included in `pnpm --filter @ship/api test:fleetgraph-eval`, verifies the scheduled drain command keeps local drain-only defaults and parses Render sweep settings for proactive backstop coverage.
 - `api/src/services/fleetgraph/detectors.test.ts` verifies the detector registry metadata plus all nine detector paths, including overdue milestones, workload imbalance, scope churn rate, and RACI drift.
 - `api/src/services/fleetgraph/retention.test.ts` verifies configurable retention windows, dry-run reporting, monthly cost rollups before run pruning, terminal history pruning, resolved-finding soft delete, retained historical HITL proposals, and preservation of active work/HITL gates.
-- `api/src/services/fleetgraph/eval-harness.test.ts` scores the six PRD use cases plus the no-finding branch; the expanded detector tests cover the four added post-MVP detector paths.
+- `api/src/services/fleetgraph/eval-harness.test.ts` scores the six PRD use cases plus the no-finding branch; the expanded detector tests cover the four added design-review detector paths.
 - DB-backed validation completed against isolated Docker Postgres on 2026-05-26: `pnpm --filter @ship/api test:fleetgraph-api` passed 22 tests, and the focused FleetGraph OpenAPI/route run passed 17 tests.
 - FleetGraph E2E completed on 2026-05-26 with `pnpm test:e2e -- e2e/fleetgraph.spec.ts --workers=1`: 2 passed, including the timed event-to-finding path under the 5 minute requirement.
 - Public Render latency verification completed on 2026-05-27: real Ship sprint `146712c1-ac7b-4569-81cf-b459b1fbbdc0` produced delivered planning-gap finding `31c7618c-47e6-4c4e-8395-862ffe4ad3f6` in 15.3 seconds, with deployed run `2fadd444-48ff-4515-8e0d-47d56c9788ff` recording proactive mode, trigger `document.created`, token counts, and estimated cost.
@@ -719,6 +770,7 @@ Current deterministic evidence:
 Public deployment status:
 
 - Local and LangSmith evidence is complete for the MVP graph paths.
+- Deterministic local evidence and deployed Ship/LangSmith trace-ID evidence are complete for the four design-review expansion detector paths; public sharing can follow the review checklist in this document after trace payload inspection.
 - Public deployment is live at `https://ship-wf2i.onrender.com` with FleetGraph routes present and authenticated.
 - Public event-to-finding latency is verified under the 5 minute requirement.
 - Deployed billable cost metadata is recorded in `fleetgraph_runs` for the public proactive run.
@@ -747,6 +799,18 @@ Synthesized from the focused design review. Each task derives from a specific fi
   - Surfaced by: Mobile and accessibility requirements - drawer behavior and live regions were not defined.
   - Files: FleetGraph drawer/components, focused UI tests or E2E checks.
   - Verify: 375px viewport, keyboard-only path, focus order, and live-region behavior.
+- [x] **T6 (P1)** - More detection types - Add detector registry metadata and low-risk expansion detectors.
+  - Surfaced by: Design review - detector architecture supported more signals but needed registry metadata, severity/noise defaults, and tests per detector.
+  - Files: `api/src/services/fleetgraph/detectors.ts`, `api/src/services/fleetgraph/context.ts`, `api/src/services/fleetgraph/detectors.test.ts`.
+  - Verify: Registry metadata test plus overdue milestone, workload imbalance, scope churn rate, and RACI drift detector tests.
+- [x] **T7 (P1)** - Visual mockups - Document drawer, finding states, approval gate, preferences, and mobile behavior.
+  - Surfaced by: Design review - initial design was text-only and needed concrete mockups before further UI expansion.
+  - Files: `docs/fleetgraph-visual-mockups.md`, `FLEETGRAPH.md`.
+  - Verify: Mockups cover inbox states, finding detail hierarchy, approval states, notification preferences, and mobile drill-in.
+- [x] **T8 (P1)** - Long-term retention - Preserve cost/audit evidence while pruning high-volume operational rows.
+  - Surfaced by: Design review - proactive runs create findings, deliveries, runs, queue events, and checkpoints that cannot live forever at production scale.
+  - Files: `api/src/services/fleetgraph/retention.ts`, `api/src/db/migrations/052_fleetgraph_cost_rollups.sql`, `api/src/services/fleetgraph/retention.test.ts`.
+  - Verify: Retention tests cover dry-run reporting, monthly cost rollups, terminal run pruning, resolved-finding soft delete, retained historical HITL proposals, and pending gate preservation.
 
 ## Ship Reference Points
 

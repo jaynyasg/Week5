@@ -3,8 +3,10 @@
 Purpose: 3–5 minute reviewer demo for the FleetGraph Early Submission checkpoint. Target 4:00. This script covers the two sections newly due at Early Submission — Test Cases and Architecture Decisions — while grounding the reviewer in the deployed, working system.
 
 Early Submission adds to MVP:
-- Test Cases: for each use case, Ship state + expected output + LangSmith trace link.
+- Test Cases: for each MVP use case, Ship state + expected output + LangSmith trace link.
 - Architecture Decisions: framework choice, node design rationale, state management, deployment model.
+
+Current docs note: the MVP evidence package has six public trace-backed use cases. The later design-review expansion adds four more detector cases with deterministic local verification plus deployed Ship runs mapped to LangSmith trace IDs; public trace sharing is a separate privacy-review step.
 
 ## Before Recording
 
@@ -33,7 +35,7 @@ Show the top of `FLEETGRAPH.md`.
 
 Say:
 
-> This is my FleetGraph Early Submission. The MVP delivered a deployed, proactive graph with real Ship data, LangSmith traces, HITL gates, and UI notifications. This submission adds the two Early Submission deliverables: a full Test Cases section with trace evidence for each use case, and an Architecture Decisions section documenting the key choices and tradeoffs.
+> This is my FleetGraph Early Submission. The MVP delivered a deployed, proactive graph with real Ship data, LangSmith traces, HITL gates, and UI notifications. This submission adds the two Early Submission deliverables: a Test Cases section with trace evidence for the six MVP use cases, and an Architecture Decisions section documenting the key choices and tradeoffs. The current document also includes four later expansion detector cases with deterministic verification.
 
 ---
 
@@ -43,7 +45,7 @@ Scroll to the **Test Cases** section in `FLEETGRAPH.md`.
 
 Say:
 
-> The Test Cases section maps each use case to the exact Ship state that triggers it, the expected output, and a shared LangSmith trace from a real run against that state. These are not hypothetical — every trace was generated from real Ship rows.
+> The Test Cases section maps each MVP use case to the exact Ship state that triggers it, the expected output, and a shared LangSmith trace from a real run against that state. These are not hypothetical — every MVP trace was generated from real Ship rows. Rows seven through ten are the later detector-expansion cases, verified locally and also exercised on the deployed app with LangSmith trace IDs recorded after privacy review gating.
 
 Walk through three of the six rows, pausing on each:
 
@@ -174,7 +176,7 @@ Return to the top of `FLEETGRAPH.md`.
 
 Say:
 
-> Early Submission delivers test case evidence for all six use cases with shared trace links, and a documented architecture decisions section covering framework, node design, state management, and deployment. The MVP foundation — deployed graph, real Ship data, proactive detection, HITL gate, embedded chat, FleetGraph findings available to Ask Ship retrieval, and public latency pass — is unchanged and verified.
+> Early Submission delivers test case evidence for all six MVP use cases with shared trace links, and a documented architecture decisions section covering framework, node design, state management, and deployment. The current documentation also captures the later expansion detectors, retention policy, and mockup work. The MVP foundation — deployed graph, real Ship data, proactive detection, HITL gate, embedded chat, FleetGraph findings available to Ask Ship retrieval, and public latency pass — is unchanged and verified.
 
 ---
 
@@ -194,7 +196,8 @@ Say:
 |---|---|
 | Test Cases — Ship state per use case | `FLEETGRAPH.md` → `Test Cases` |
 | Test Cases — expected output per use case | `FLEETGRAPH.md` → `Test Cases` |
-| Test Cases — trace link per use case | `FLEETGRAPH.md` → `Test Cases`; LangSmith tabs |
+| Test Cases — trace link per MVP use case | `FLEETGRAPH.md` → `Test Cases`; LangSmith tabs |
+| Expansion detector cases | `FLEETGRAPH.md` → `Expanded Detector Verification Details` and `Expansion External Evidence` |
 | Architecture Decisions — framework choice | `FLEETGRAPH.md` → `Architecture Decisions` |
 | Architecture Decisions — node design rationale | `FLEETGRAPH.md` → `Architecture Decisions` |
 | Architecture Decisions — state management | `FLEETGRAPH.md` → `Architecture Decisions` |

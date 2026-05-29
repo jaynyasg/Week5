@@ -4,8 +4,7 @@ Purpose: 4–5 minute reviewer demo for the FleetGraph Final Submission. Target 
 
 Final Submission adds to Early Submission:
 - Cost Analysis: development spend with token breakdown, production cost projections at 3 scales with full assumptions.
-
-> **Note:** This script may need updating before recording if new traces, deployment evidence, or cost rows are added between Early and Final Submission.
+- Design-review expansion documentation: four additional detectors, visual mockups/state matrices, and retention/cost rollup policy.
 
 ## Before Recording
 
@@ -28,7 +27,7 @@ Show the top of `FLEETGRAPH.md`.
 
 Say:
 
-> This is my FleetGraph Final Submission. FleetGraph is a Ship-native project intelligence agent: it reads real project, week, issue, timeline, and ownership data; proactively detects risks without being asked; records durable findings; and gives engineers, PMs, and directors a context-aware assistant inside the existing Ship UI. This submission covers all rubric items: agent responsibility, graph, use cases, trigger model, test cases, architecture decisions, and cost analysis.
+> This is my FleetGraph Final Submission. FleetGraph is a Ship-native project intelligence agent: it reads real project, week, issue, timeline, ownership, and document-history data; proactively detects risks without being asked; records durable findings; and gives engineers, PMs, and directors a context-aware assistant inside the existing Ship UI. This submission covers all rubric items: agent responsibility, graph, use cases, trigger model, test cases, architecture decisions, and cost analysis, plus the design-review expansion work.
 
 ---
 
@@ -56,7 +55,7 @@ Scroll to the **Test Cases** section in `FLEETGRAPH.md`.
 
 Say:
 
-> Six use cases, six test cases, six shared LangSmith traces — all generated from real Ship rows. They cover three distinct execution paths.
+> The test table now has six MVP trace-backed use cases plus four design-review expansion detector cases. The MVP evidence has six shared LangSmith traces generated from real Ship rows, covering three distinct execution paths. The expansion rows document overdue milestones, workload imbalance, scope churn, and RACI drift with deterministic detector tests plus deployed Ship runs mapped to LangSmith trace IDs. Those expansion trace IDs are not public links until the trace payloads are reviewed for private project data.
 
 Show the three key traces:
 
@@ -148,7 +147,7 @@ Say:
 
 Return to the top of `FLEETGRAPH.md` and say:
 
-> The full submission: a deployed graph running against real Ship data, proactive detection under five minutes, six LangSmith traces showing three distinct execution paths, a human-in-the-loop gate using LangGraph interrupts, an embedded context-aware chat interface, per-user notification delivery, documented architecture decisions, and a cost model with measured development spend and defended production projections.
+> The full submission: a deployed graph running against real Ship data, proactive detection under five minutes, six LangSmith traces showing three distinct execution paths, a human-in-the-loop gate using LangGraph interrupts, an embedded context-aware chat interface, per-user notification delivery, documented architecture decisions, expanded detector documentation, and a cost model with measured development spend and defended production projections.
 
 ---
 
@@ -171,13 +170,14 @@ Return to the top of `FLEETGRAPH.md` and say:
 | Graph diagram and outline | `FLEETGRAPH.md` → `Graph Diagram` and `Graph Outline` |
 | Trigger model | `FLEETGRAPH.md` → `Trigger Model` |
 | Use cases (≥5) | `FLEETGRAPH.md` → `Use Cases` |
-| Test cases with trace links | `FLEETGRAPH.md` → `Test Cases`; LangSmith tabs |
+| MVP test cases with trace links | `FLEETGRAPH.md` → `Test Cases`; LangSmith tabs |
+| Expansion detector verification | `FLEETGRAPH.md` → `Expanded Detector Verification Details` and `Expansion External Evidence`; `api/src/services/fleetgraph/detectors.test.ts` |
 | Architecture decisions | `FLEETGRAPH.md` → `Architecture Decisions` |
 | **Cost analysis — development spend** | `FLEETGRAPH.md` → `Performance and Cost` → `Development and Testing Costs` |
 | **Cost analysis — production projections** | `FLEETGRAPH.md` → `Performance and Cost` → `Production Cost Projections` |
 | Different execution paths | Traces `129c549c`, `fdca7b9c`, `6a0f01b2` |
 | Human-in-the-loop gate | HITL trace `fdca7b9c`; `Human-in-the-Loop Experience` section |
-| Real Ship data | All six traces from real Ship rows |
+| Real Ship data | All six MVP traces from real Ship rows; expansion rows have deterministic tests plus deployed Ship/LangSmith trace IDs |
 | Proactive detection end-to-end | Deployment Evidence; proactive trace `129c549c` |
 | Deployed and publicly accessible | `https://ship-wf2i.onrender.com` |
 | Detection latency under 5 minutes | Public timed run: 15.3 seconds |

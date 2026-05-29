@@ -10,10 +10,20 @@ fi
 
 # Open source compliance checks (secrets scan + AI analysis)
 if command -v comply &> /dev/null; then
-  # NOTE: --skip-trivy is temporary workaround for compliance-toolkit bug
-  # https://github.com/US-Department-of-the-Treasury/compliance-toolkit/issues/XXX
-  # Remove --skip-trivy once the ImportError in sbom module is fixed
-  comply opensource --hook --staged --exclude e2e --skip-trivy
+  if comply opensource --help >/dev/null 2>&1; then
+    # NOTE: --skip-trivy is temporary workaround for compliance-toolkit bug
+    # https://github.com/US-Department-of-the-Treasury/compliance-toolkit/issues/XXX
+    # Remove --skip-trivy once the ImportError in sbom module is fixed
+    comply opensource --hook --staged --exclude e2e --skip-trivy
+  elif [ -f ".comply.yml" ] && comply check --help >/dev/null 2>&1; then
+    comply check
+  else
+    echo ""
+    echo "WARNING: 'comply' CLI is installed but incompatible with this hook."
+    echo "Expected either 'comply opensource' or 'comply check' with .comply.yml."
+    echo "Skipping open source compliance checks for this commit."
+    echo ""
+  fi
 else
   echo ""
   echo "WARNING: 'comply' CLI not installed - skipping open source compliance checks"

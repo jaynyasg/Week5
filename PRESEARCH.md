@@ -1,6 +1,6 @@
 # FleetGraph Presearch
 
-Last reviewed: 2026-05-26
+Last reviewed: 2026-05-29
 
 This file is the completed pre-search checklist for the Week 5 FleetGraph build. It answers each of the nine checklist items before implementation, drawing on the PRD, Ship reference code, and external documentation listed below.
 
@@ -79,7 +79,7 @@ The authenticated chat request includes the current route path, document ID, doc
 
 ### 2. Use Case Discovery
 
-Six use cases are defined in FLEETGRAPH.md covering Director, PM, Engineer, and User roles. Each includes: the Ship state that triggers the agent, what the agent detects or produces, what the human decides, and a LangSmith trace from a real run.
+Ten use cases are defined in FLEETGRAPH.md covering Director, PM, Engineer, Manager, and User roles. MVP rows 1-6 include the Ship state that triggers the agent, what the agent detects or produces, what the human decides, and a shared LangSmith trace from a real run. Expansion rows 7-10 document the additional detector work with deterministic local verification plus deployed Ship runs mapped to LangSmith trace IDs on 2026-05-29; public sharing remains gated on trace-payload review.
 
 Summary of pain points discovered before implementation:
 
@@ -89,6 +89,10 @@ Summary of pain points discovered before implementation:
 - Approved plans get quietly edited after approval with no flag that the original approval is stale.
 - Projects frequently launch without an owner or accountable assigned, leaving accountability gaps that only surface in retros.
 - Users have no way to ask "what should I look at next?" in context without leaving Ship to use a general AI tool.
+- Overdue milestone dates can sit inside project/week properties without creating a visible delivery risk signal.
+- Managers cannot quickly see workload concentration when one assignee owns materially more active work than peers.
+- Scope churn is hard to spot from the current document alone because the risk is spread across recent edits, estimates, priorities, and issue associations.
+- RACI drift over time can leave teams uncertain about who is responsible even when the current owner field is populated.
 
 ---
 
@@ -121,8 +125,8 @@ At 12 proactive runs per project per day (one every 2 hours, matching the sweep 
 | Role | Node | Description |
 |---|---|---|
 | Context | Normalize context | Reads request payload or queue payload; produces canonical target, trigger type, idempotency key, and graph mode |
-| Fetch | Load Ship context | Reads workspace, document, project, week, issue, timeline, accountability, and association rows from Ship |
-| Reasoning | Detect conditions | Evaluates the evidence bundle against detection rules; produces candidate findings |
+| Fetch | Load Ship context | Reads workspace, document, project, week, issue, timeline, accountability, association, and recent `document_history` rows from Ship |
+| Reasoning | Detect conditions | Evaluates the evidence bundle against registered detector rules; produces candidate findings with detector ID, kind, severity, and notification/noise metadata |
 | Reasoning | Rank and route | Scores severity, resolves notification audience, decides whether a mutation proposal is needed |
 | Action | Persist finding | Writes `fleetgraph_finding` document, associations, and delivery rows |
 | Action | HITL proposal | Creates `fleetgraph_action_proposals` row and emits LangGraph interrupt |
@@ -131,7 +135,7 @@ At 12 proactive runs per project per day (one every 2 hours, matching the sweep 
 
 **Which fetch nodes run in parallel?**
 
-Inside Load Ship context, the project, week, issue list, timeline, and accountability queries run concurrently using `Promise.all`. The document load for the trigger document runs first (sequential) because the project and week resolvers depend on it.
+Inside Load Ship context, the project, week, issue list, timeline, accountability, and history lookups are scoped to the resolved target records. The document load for the trigger document runs first (sequential) because the project and week resolvers depend on it.
 
 **Where are the conditional edges and what triggers each branch?**
 
@@ -147,7 +151,7 @@ Workspace ID, user ID, route context, trigger type, trigger document, idempotenc
 
 **What state persists between proactive runs?**
 
-`fleetgraph_finding` documents and their document associations record what was found and when. `fleetgraph_runs` rows record each completed run. Idempotency keys on queue entries and finding properties prevent the same condition from producing a duplicate finding within the same state window. `fleetgraph_deliveries` rows track per-user read state independently of the shared finding document.
+`fleetgraph_finding` documents and their document associations record what was found and when. `fleetgraph_runs` rows record each run until retention prunes terminal history. `fleetgraph_monthly_cost_rollups` preserves long-lived token/cost totals before old runs are deleted. `fleetgraph_action_proposals` keeps HITL audit decisions even when the source run is later pruned. Idempotency keys on queue entries and finding properties prevent the same condition from producing a duplicate finding within the same state window. `fleetgraph_deliveries` rows track per-user read state independently of the shared finding document.
 
 **How do you avoid redundant API calls?**
 
@@ -217,4 +221,4 @@ Proactive runs: 5,000 input tokens and 500 output tokens per run. On-demand chat
 
 **Where are the cost cliffs in your architecture?**
 
-The main cliff is projects with many open issues — each issue adds tokens to the evidence bundle. The sweep running across many projects simultaneously multiplies the drain cost. On-demand chat invocations scale linearly with active users. Mitigation: the evidence bundle is pre-filtered to the most relevant signals before the LLM call; the sweep is bounded to a configurable number of projects per run.
+The main cliff is projects with many open issues — each issue adds tokens to the evidence bundle. History-based detectors add a bounded 60-day `document_history` lookup for relevant project/week/issue/plan records, so churn and RACI analysis must keep evidence excerpts capped. The sweep running across many projects simultaneously multiplies the drain cost. On-demand chat invocations scale linearly with active users. Mitigation: the evidence bundle is pre-filtered to the most relevant signals before the LLM call; the sweep is bounded to a configurable number of projects per run, and old terminal runs are rolled up before pruning.
