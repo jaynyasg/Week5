@@ -12,6 +12,9 @@ import type {
 } from './types.js';
 
 const STALE_ISSUE_DAYS = 7;
+const PROJECT_CHURN_MIN_STALE_ISSUES = 3;
+const OVERDUE_MILESTONE_GRACE_DAYS = 0;
+const OVERDUE_MILESTONE_HIGH_AFTER_DAYS = 7;
 const WORKLOAD_IMBALANCE_MIN_ACTIVE_ISSUES = 4;
 const WORKLOAD_IMBALANCE_MIN_ESTIMATED_HOURS = 24;
 const WORKLOAD_IMBALANCE_RATIO = 2;
@@ -41,6 +44,36 @@ export interface FleetGraphDetectorDefinition {
   windowDays?: number;
   detect: (context: FleetGraphContext) => FleetGraphFindingCandidate | null;
 }
+
+export const fleetGraphDetectorThresholdDefaults: Record<FleetGraphDetectorId, Record<string, number>> = {
+  'missing-approved-plan': {},
+  'approved-plan-drift': {},
+  'missing-ownership': {},
+  'stale-issue': {
+    staleIssueDays: STALE_ISSUE_DAYS,
+  },
+  'project-churn': {
+    staleIssueDays: STALE_ISSUE_DAYS,
+    minStaleIssues: PROJECT_CHURN_MIN_STALE_ISSUES,
+  },
+  'overdue-milestone': {
+    graceDays: OVERDUE_MILESTONE_GRACE_DAYS,
+    highSeverityAfterDays: OVERDUE_MILESTONE_HIGH_AFTER_DAYS,
+  },
+  'workload-imbalance': {
+    minActiveIssues: WORKLOAD_IMBALANCE_MIN_ACTIVE_ISSUES,
+    minEstimatedHours: WORKLOAD_IMBALANCE_MIN_ESTIMATED_HOURS,
+    imbalanceRatio: WORKLOAD_IMBALANCE_RATIO,
+  },
+  'scope-churn-rate': {
+    windowDays: SCOPE_CHURN_WINDOW_DAYS,
+    minChanges: SCOPE_CHURN_MIN_CHANGES,
+  },
+  'raci-drift': {
+    windowDays: RACI_DRIFT_WINDOW_DAYS,
+    minChanges: RACI_DRIFT_MIN_CHANGES,
+  },
+};
 
 export const fleetGraphDetectorRegistry: readonly FleetGraphDetectorDefinition[] = [
   {
@@ -133,9 +166,17 @@ export const fleetGraphDetectorRegistry: readonly FleetGraphDetectorDefinition[]
 export function detectFleetGraphFindings(context: FleetGraphContext): FleetGraphFindingCandidate[] {
   const findings: FleetGraphFindingCandidate[] = [];
   for (const detector of fleetGraphDetectorRegistry) {
+    const tuning = context.detectorSettings?.[detector.id];
+    if (tuning?.enabled === false) continue;
+
     const candidate = detector.detect(context);
     if (candidate) {
-      findings.push({ ...candidate, detectorId: detector.id, noiseDefault: detector.noiseDefault });
+      findings.push({
+        ...candidate,
+        severity: tuning?.severity ?? candidate.severity,
+        detectorId: detector.id,
+        noiseDefault: detector.noiseDefault,
+      });
     }
   }
   return findings;
@@ -231,7 +272,8 @@ export function detectMissingOwnership(context: FleetGraphContext): FleetGraphFi
 }
 
 export function detectStaleIssue(context: FleetGraphContext): FleetGraphFindingCandidate | null {
-  const staleIssue = context.issues.find((issue) => isIssueStale(issue, context.now));
+  const staleIssueDays = detectorThreshold(context, 'stale-issue', 'staleIssueDays', STALE_ISSUE_DAYS);
+  const staleIssue = context.issues.find((issue) => isIssueStale(issue, context.now, staleIssueDays));
   if (!staleIssue) return null;
 
   return {
@@ -241,7 +283,7 @@ export function detectStaleIssue(context: FleetGraphContext): FleetGraphFindingC
     kind: 'stale_commitment',
     confidence: 0.8,
     summary: 'An active issue has not been updated recently.',
-    rationale: `The issue is still ${staleIssue.state ?? 'active'} and has not changed in at least ${STALE_ISSUE_DAYS} days.`,
+    rationale: `The issue is still ${staleIssue.state ?? 'active'} and has not changed in at least ${staleIssueDays} days.`,
     targetDocumentId: staleIssue.id,
     targetDocumentType: 'issue',
     ownerUserId: staleIssue.assigneeId,
@@ -253,8 +295,10 @@ export function detectProjectChurn(context: FleetGraphContext): FleetGraphFindin
   const project = context.project;
   if (!project) return null;
 
-  const staleIssues = context.issues.filter((issue) => isIssueStale(issue, context.now));
-  if (staleIssues.length < 3) return null;
+  const staleIssueDays = detectorThreshold(context, 'project-churn', 'staleIssueDays', STALE_ISSUE_DAYS);
+  const minStaleIssues = detectorThreshold(context, 'project-churn', 'minStaleIssues', PROJECT_CHURN_MIN_STALE_ISSUES);
+  const staleIssues = context.issues.filter((issue) => isIssueStale(issue, context.now, staleIssueDays));
+  if (staleIssues.length < minStaleIssues) return null;
 
   return {
     key: `project-churn:${project.id}`,
@@ -263,7 +307,7 @@ export function detectProjectChurn(context: FleetGraphContext): FleetGraphFindin
     kind: 'dependency_risk',
     confidence: 0.78,
     summary: 'Multiple active issues are stale in the same project.',
-    rationale: 'Three or more stale issues in one project is enough signal to ask a human to inspect execution risk.',
+    rationale: `${minStaleIssues} or more issues stale for at least ${staleIssueDays} days in one project is enough signal to ask a human to inspect execution risk.`,
     targetDocumentId: project.id,
     targetDocumentType: 'project',
     ownerUserId: readString(project.properties.owner_id),
@@ -286,21 +330,25 @@ export function detectOverdueMilestone(context: FleetGraphContext): FleetGraphFi
   const dueDate = readMilestoneDate(target);
   if (!dueDate) return null;
 
+  const graceDays = detectorThreshold(context, 'overdue-milestone', 'graceDays', OVERDUE_MILESTONE_GRACE_DAYS);
+  const highSeverityAfterDays = detectorThreshold(context, 'overdue-milestone', 'highSeverityAfterDays', OVERDUE_MILESTONE_HIGH_AFTER_DAYS);
   const now = new Date(context.now);
   if (Number.isNaN(now.getTime()) || dueDate >= startOfDay(now)) return null;
 
   const daysLate = Math.max(1, daysBetween(dueDate, now));
+  if (daysLate <= graceDays) return null;
+
   const ownerUserId = readString(target.properties.owner_id)
     ?? readString(target.properties.accountable_id);
 
   return {
     key: `overdue-milestone:${target.id}:${dueDate.toISOString().slice(0, 10)}`,
     title: `Milestone overdue: ${target.title}`,
-    severity: daysLate >= 7 ? 'high' : 'medium',
+    severity: daysLate >= highSeverityAfterDays ? 'high' : 'medium',
     kind: 'stale_commitment',
     confidence: 0.82,
     summary: `${target.title} is ${daysLate} day${daysLate === 1 ? '' : 's'} past its target date.`,
-    rationale: 'FleetGraph raises this when an active project or week has a target date in the past and has not been closed.',
+    rationale: `FleetGraph raises this when an active project or week is more than ${graceDays} day${graceDays === 1 ? '' : 's'} past its target date and has not been closed.`,
     targetDocumentId: target.id,
     targetDocumentType: target.documentType,
     ownerUserId,
@@ -311,6 +359,9 @@ export function detectOverdueMilestone(context: FleetGraphContext): FleetGraphFi
 }
 
 export function detectWorkloadImbalance(context: FleetGraphContext): FleetGraphFindingCandidate | null {
+  const minActiveIssues = detectorThreshold(context, 'workload-imbalance', 'minActiveIssues', WORKLOAD_IMBALANCE_MIN_ACTIVE_ISSUES);
+  const minEstimatedHours = detectorThreshold(context, 'workload-imbalance', 'minEstimatedHours', WORKLOAD_IMBALANCE_MIN_ESTIMATED_HOURS);
+  const imbalanceRatio = detectorThreshold(context, 'workload-imbalance', 'imbalanceRatio', WORKLOAD_IMBALANCE_RATIO);
   const activeIssues = context.issues.filter((issue) => !isClosedStatus(issue.state));
   const assigneeLoads = new Map<string, { issues: FleetGraphIssueRef[]; estimatedHours: number }>();
 
@@ -330,11 +381,11 @@ export function detectWorkloadImbalance(context: FleetGraphContext): FleetGraphF
 
   const otherLoads = rankedLoads.slice(1);
   const comparisonLoad = otherLoads[0]?.estimatedHours ?? 0;
-  const isLargeEnough = topLoad.issues.length >= WORKLOAD_IMBALANCE_MIN_ACTIVE_ISSUES
-    || topLoad.estimatedHours >= WORKLOAD_IMBALANCE_MIN_ESTIMATED_HOURS;
+  const isLargeEnough = topLoad.issues.length >= minActiveIssues
+    || topLoad.estimatedHours >= minEstimatedHours;
   const isImbalanced = comparisonLoad === 0
-    ? topLoad.issues.length >= WORKLOAD_IMBALANCE_MIN_ACTIVE_ISSUES
-    : topLoad.estimatedHours >= comparisonLoad * WORKLOAD_IMBALANCE_RATIO;
+    ? topLoad.issues.length >= minActiveIssues
+    : topLoad.estimatedHours >= comparisonLoad * imbalanceRatio;
   if (!isLargeEnough || !isImbalanced) return null;
 
   const fallbackIssue = topLoad.issues[0];
@@ -351,7 +402,7 @@ export function detectWorkloadImbalance(context: FleetGraphContext): FleetGraphF
     kind: 'delivery_conflict',
     confidence: 0.76,
     summary: `${topLoad.assigneeId} owns ${topLoad.issues.length} active issue${topLoad.issues.length === 1 ? '' : 's'} totaling about ${estimatedLabel} hours.`,
-    rationale: 'FleetGraph compares open issue ownership and estimated effort so an overloaded owner can be reviewed before delivery slips.',
+    rationale: `FleetGraph compares open issue ownership and estimated effort using a ${imbalanceRatio}x imbalance threshold so an overloaded owner can be reviewed before delivery slips.`,
     targetDocumentId: target.id,
     targetDocumentType: target.documentType,
     ownerUserId: topLoad.assigneeId,
@@ -368,19 +419,21 @@ export function detectWorkloadImbalance(context: FleetGraphContext): FleetGraphF
 export function detectScopeChurnRate(context: FleetGraphContext): FleetGraphFindingCandidate | null {
   const target = context.project ?? context.week;
   if (!target) return null;
+  const windowDays = detectorThreshold(context, 'scope-churn-rate', 'windowDays', SCOPE_CHURN_WINDOW_DAYS);
+  const minChanges = detectorThreshold(context, 'scope-churn-rate', 'minChanges', SCOPE_CHURN_MIN_CHANGES);
 
   const relatedDocumentIds = new Set([
     target.id,
     ...context.issues.map((issue) => issue.id),
     ...(context.weekPlan ? [context.weekPlan.id] : []),
   ]);
-  const scopeChanges = recentHistory(context, SCOPE_CHURN_WINDOW_DAYS)
+  const scopeChanges = recentHistory(context, windowDays)
     .filter((entry) => relatedDocumentIds.has(entry.documentId))
     .filter(isScopeChange);
-  if (scopeChanges.length < SCOPE_CHURN_MIN_CHANGES) return null;
+  if (scopeChanges.length < minChanges) return null;
 
-  const severity = scopeChanges.length >= SCOPE_CHURN_MIN_CHANGES * 2 ? 'high' : 'medium';
-  const windowStart = windowStartDate(context.now, SCOPE_CHURN_WINDOW_DAYS);
+  const severity = scopeChanges.length >= minChanges * 2 ? 'high' : 'medium';
+  const windowStart = windowStartDate(context.now, windowDays);
 
   return {
     key: `scope-churn-rate:${target.id}:${windowStart.toISOString().slice(0, 10)}`,
@@ -388,7 +441,7 @@ export function detectScopeChurnRate(context: FleetGraphContext): FleetGraphFind
     severity,
     kind: 'scope_drift',
     confidence: 0.74,
-    summary: `${scopeChanges.length} scope-related changes landed in the last ${SCOPE_CHURN_WINDOW_DAYS} days.`,
+    summary: `${scopeChanges.length} scope-related changes landed in the last ${windowDays} days.`,
     rationale: 'Frequent scope, estimate, priority, title, or issue-association changes can hide delivery risk even when individual updates look reasonable.',
     targetDocumentId: target.id,
     targetDocumentType: target.documentType,
@@ -404,18 +457,20 @@ export function detectScopeChurnRate(context: FleetGraphContext): FleetGraphFind
 export function detectRaciDrift(context: FleetGraphContext): FleetGraphFindingCandidate | null {
   const target = context.project ?? context.program ?? context.week;
   if (!target) return null;
+  const windowDays = detectorThreshold(context, 'raci-drift', 'windowDays', RACI_DRIFT_WINDOW_DAYS);
+  const minChanges = detectorThreshold(context, 'raci-drift', 'minChanges', RACI_DRIFT_MIN_CHANGES);
 
   const relatedDocumentIds = new Set([
     target.id,
     ...context.issues.map((issue) => issue.id),
   ]);
-  const raciChanges = recentHistory(context, RACI_DRIFT_WINDOW_DAYS)
+  const raciChanges = recentHistory(context, windowDays)
     .filter((entry) => relatedDocumentIds.has(entry.documentId))
     .filter(isRaciChange);
-  if (raciChanges.length < RACI_DRIFT_MIN_CHANGES) return null;
+  if (raciChanges.length < minChanges) return null;
 
-  const severity = raciChanges.length >= RACI_DRIFT_MIN_CHANGES * 2 ? 'high' : 'medium';
-  const windowStart = windowStartDate(context.now, RACI_DRIFT_WINDOW_DAYS);
+  const severity = raciChanges.length >= minChanges * 2 ? 'high' : 'medium';
+  const windowStart = windowStartDate(context.now, windowDays);
 
   return {
     key: `raci-drift:${target.id}:${windowStart.toISOString().slice(0, 10)}`,
@@ -423,7 +478,7 @@ export function detectRaciDrift(context: FleetGraphContext): FleetGraphFindingCa
     severity,
     kind: 'planning_gap',
     confidence: 0.73,
-    summary: `${raciChanges.length} ownership or accountability changes occurred in the last ${RACI_DRIFT_WINDOW_DAYS} days.`,
+    summary: `${raciChanges.length} ownership or accountability changes occurred in the last ${windowDays} days.`,
     rationale: 'Repeated owner, accountable, responsible, or assignee changes can make delivery responsibility unclear enough to warrant review.',
     targetDocumentId: target.id,
     targetDocumentType: target.documentType,
@@ -449,11 +504,21 @@ function isActiveWeek(week: FleetGraphRecordRef, nowIso: string): boolean {
   return start <= now && now <= end;
 }
 
-function isIssueStale(issue: FleetGraphIssueRef, nowIso: string): boolean {
+function detectorThreshold(
+  context: FleetGraphContext,
+  detectorId: FleetGraphDetectorId,
+  key: string,
+  fallback: number,
+): number {
+  const value = context.detectorSettings?.[detectorId]?.thresholds?.[key];
+  return typeof value === 'number' && Number.isFinite(value) ? value : fallback;
+}
+
+function isIssueStale(issue: FleetGraphIssueRef, nowIso: string, staleIssueDays: number): boolean {
   if (!issue.state || isClosedStatus(issue.state)) return false;
   if (!issue.updatedAt) return false;
   const ageMs = new Date(nowIso).getTime() - new Date(issue.updatedAt).getTime();
-  return ageMs >= STALE_ISSUE_DAYS * 24 * 60 * 60 * 1000;
+  return ageMs >= staleIssueDays * 24 * 60 * 60 * 1000;
 }
 
 function isClosedStatus(status: unknown): boolean {

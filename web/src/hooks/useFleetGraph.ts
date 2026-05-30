@@ -5,17 +5,25 @@ import type {
   FleetGraphActionDecisionRequest,
   FleetGraphChatRequest,
   FleetGraphChatResponse,
+  FleetGraphDetectorUpdateRequest,
+  FleetGraphReplayScenarioCreateRequest,
   FleetGraphFindingSummary,
   FleetGraphNotificationPreferencesUpdateRequest,
 } from '@ship/shared';
 import {
+  createFleetGraphReplayScenario,
   decideFleetGraphAction,
+  getFleetGraphDetectors,
   getFleetGraphFinding,
   getFleetGraphFindings,
   getFleetGraphNotificationPreferences,
+  getFleetGraphOps,
+  getFleetGraphReplayScenarios,
   getFleetGraphRun,
   getFleetGraphStatus,
+  runFleetGraphReplayScenario,
   sendFleetGraphMessage,
+  updateFleetGraphDetector,
   updateFleetGraphDelivery,
   updateFleetGraphNotificationPreferences,
 } from '@/services/fleetgraph';
@@ -31,6 +39,9 @@ export const fleetGraphKeys = {
   finding: (id?: string | null) => ['fleetgraph', 'finding', id] as const,
   run: (id?: string | null) => ['fleetgraph', 'run', id] as const,
   notificationPreferences: ['fleetgraph', 'notificationPreferences'] as const,
+  ops: ['fleetgraph', 'ops'] as const,
+  detectors: ['fleetgraph', 'detectors'] as const,
+  replayScenarios: ['fleetgraph', 'replayScenarios'] as const,
 };
 
 export interface FleetGraphTranscriptMessage {
@@ -75,6 +86,24 @@ export function useFleetGraph(context?: AssistantRouteContext) {
     queryKey: fleetGraphKeys.notificationPreferences,
     queryFn: getFleetGraphNotificationPreferences,
     staleTime: 60_000,
+  });
+
+  const opsQuery = useQuery({
+    queryKey: fleetGraphKeys.ops,
+    queryFn: getFleetGraphOps,
+    staleTime: 15_000,
+  });
+
+  const detectorsQuery = useQuery({
+    queryKey: fleetGraphKeys.detectors,
+    queryFn: getFleetGraphDetectors,
+    staleTime: 60_000,
+  });
+
+  const replayScenariosQuery = useQuery({
+    queryKey: fleetGraphKeys.replayScenarios,
+    queryFn: getFleetGraphReplayScenarios,
+    staleTime: 30_000,
   });
 
   const deliveryByFindingId = useMemo(() => {
@@ -140,6 +169,33 @@ export function useFleetGraph(context?: AssistantRouteContext) {
     },
   });
 
+  const detectorMutation = useMutation({
+    mutationFn: ({ id, updates }: { id: string; updates: FleetGraphDetectorUpdateRequest }) =>
+      updateFleetGraphDetector(id, updates),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.detectors });
+      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.ops });
+      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findingsRoot });
+    },
+  });
+
+  const replayScenarioMutation = useMutation({
+    mutationFn: (scenario: FleetGraphReplayScenarioCreateRequest) =>
+      createFleetGraphReplayScenario(scenario),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.replayScenarios });
+    },
+  });
+
+  const replayRunMutation = useMutation({
+    mutationFn: (id: string) => runFleetGraphReplayScenario(id),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.replayScenarios });
+      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.ops });
+      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findingsRoot });
+    },
+  });
+
   const selectFinding = (finding: FleetGraphFindingSummary) => {
     setSelectedFindingId(finding.id);
     const delivery = deliveryByFindingId.get(finding.id);
@@ -200,6 +256,15 @@ export function useFleetGraph(context?: AssistantRouteContext) {
     notificationPreferences: notificationPreferencesQuery.data,
     notificationPreferencesLoading: notificationPreferencesQuery.isLoading,
     notificationPreferencesError: notificationPreferencesQuery.error,
+    ops: opsQuery.data,
+    opsLoading: opsQuery.isLoading,
+    opsError: opsQuery.error,
+    detectors: detectorsQuery.data?.detectors ?? [],
+    detectorsLoading: detectorsQuery.isLoading,
+    detectorsError: detectorsQuery.error,
+    replayScenarios: replayScenariosQuery.data?.scenarios ?? [],
+    replayScenariosLoading: replayScenariosQuery.isLoading,
+    replayScenariosError: replayScenariosQuery.error,
     messages,
     send,
     sending: chatMutation.isPending,
@@ -216,8 +281,21 @@ export function useFleetGraph(context?: AssistantRouteContext) {
       notificationPreferencesMutation.mutate(preferences),
     updatingNotificationPreferences: notificationPreferencesMutation.isPending,
     notificationPreferencesUpdateError: notificationPreferencesMutation.error,
+    updateDetector: (id: string, updates: FleetGraphDetectorUpdateRequest) =>
+      detectorMutation.mutate({ id, updates }),
+    updatingDetector: detectorMutation.isPending,
+    detectorUpdateError: detectorMutation.error,
+    createReplayScenario: (scenario: FleetGraphReplayScenarioCreateRequest) =>
+      replayScenarioMutation.mutate(scenario),
+    creatingReplayScenario: replayScenarioMutation.isPending,
+    replayScenarioCreateError: replayScenarioMutation.error,
+    runReplayScenario: (id: string) => replayRunMutation.mutate(id),
+    runningReplayScenario: replayRunMutation.isPending,
+    replayRunError: replayRunMutation.error,
     refresh: () => {
       void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.findingsRoot });
+      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.ops });
+      void queryClient.invalidateQueries({ queryKey: fleetGraphKeys.replayScenarios });
     },
     reset: () => setMessages([]),
   };

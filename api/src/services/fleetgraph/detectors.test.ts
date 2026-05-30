@@ -226,6 +226,48 @@ describe('FleetGraph detectors', () => {
     }));
   });
 
+  it('applies workspace detector tuning before surfacing registry findings', () => {
+    const context = fleetContext({
+      project: record('project-1', 'project', 'Launch Project', {
+        owner_id: 'owner-1',
+        accountable_id: 'accountable-1',
+        status: 'active',
+        target_date: '2026-05-10',
+      }),
+      detectorSettings: {
+        'overdue-milestone': {
+          enabled: false,
+        },
+        'missing-ownership': {
+          severity: 'critical',
+        },
+      },
+    });
+
+    const findings = detectFleetGraphFindings(context);
+
+    expect(findings).not.toContainEqual(expect.objectContaining({
+      detectorId: 'overdue-milestone',
+    }));
+  });
+
+  it('uses detector threshold overrides for stale issue detection', () => {
+    const context = fleetContext({
+      issues: [
+        issue('issue-1', 'Todo 1', 'todo', '2026-05-24T00:00:00.000Z'),
+      ],
+      detectorSettings: {
+        'stale-issue': {
+          thresholds: { staleIssueDays: 1 },
+        },
+      },
+    });
+
+    const finding = detectStaleIssue(context);
+
+    expect(finding?.rationale).toContain('at least 1 days');
+  });
+
   it('returns no findings when no condition is surfacing-worthy', () => {
     const context = fleetContext({
       week: record('week-1', 'sprint', 'Week 5', { sprint_status: 'active' }),

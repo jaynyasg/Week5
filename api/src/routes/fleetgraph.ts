@@ -19,6 +19,17 @@ import {
   getFleetGraphNotificationPreferences,
   upsertFleetGraphNotificationPreferences,
 } from '../services/fleetgraph/notification-preferences.js';
+import {
+  listFleetGraphDetectorSettings,
+  UnknownFleetGraphDetectorError,
+  upsertFleetGraphDetectorSetting,
+} from '../services/fleetgraph/detector-settings.js';
+import { getFleetGraphOps } from '../services/fleetgraph/ops.js';
+import {
+  createFleetGraphReplayScenario,
+  listFleetGraphReplayScenarios,
+  runFleetGraphReplayScenario,
+} from '../services/fleetgraph/replay.js';
 import type { FleetGraphEvidenceRef } from '../services/fleetgraph/types.js';
 
 type RouterType = ReturnType<typeof Router>;
@@ -58,6 +69,52 @@ const notificationPreferencesSchema = z.object({
   message: 'At least one notification preference is required',
 });
 
+const detectorUpdateSchema = z.object({
+  enabled: z.boolean().optional(),
+  severity: z.enum(['info', 'low', 'medium', 'high', 'critical']).nullable().optional(),
+  thresholds: z.record(z.number().finite().nonnegative()).optional(),
+}).refine((value) => Object.keys(value).length > 0, {
+  message: 'At least one detector setting is required',
+});
+
+const replayExpectedSchema = z.object({
+  expectedStatus: z.enum(['completed', 'interrupted', 'failed']).default('completed'),
+  minFindings: z.number().int().min(0).optional(),
+  expectedFindingKinds: z.array(z.enum([
+    'dependency_risk',
+    'stale_commitment',
+    'missing_update',
+    'scope_drift',
+    'planning_gap',
+    'delivery_conflict',
+    'other',
+  ])).optional(),
+  expectedProposalActions: z.array(z.enum([
+    'create_issue',
+    'update_document',
+    'create_association',
+    'notify_owner',
+    'request_update',
+  ])).optional(),
+  requiredAnswerTerms: z.array(z.string().trim().min(1)).optional(),
+  expectedCitationTitles: z.array(z.string().trim().min(1)).optional(),
+});
+
+const replayScenarioCreateSchema = z.object({
+  name: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(1000).optional(),
+  routeContext: z.object({
+    path: z.string().optional(),
+    documentId: z.string().uuid().optional(),
+    documentType: z.string().optional(),
+    projectId: z.string().uuid().optional(),
+  }).optional(),
+  triggerType: z.string().trim().min(1).max(120).optional(),
+  triggerId: z.string().uuid().nullable().optional(),
+  message: z.string().trim().max(FLEETGRAPH_LIMITS.maxMessageChars).nullable().optional(),
+  expected: replayExpectedSchema,
+});
+
 const deliveryUpdateSchema = z.object({
   status: z.enum(['read', 'dismissed', 'snoozed']),
   snoozedUntil: z.string().datetime().optional(),
@@ -80,6 +137,10 @@ router.get('/status', authMiddleware, async (req: Request, res: Response) => {
     },
     queue: await getFleetGraphQueueStatus(req.workspaceId!),
   });
+});
+
+router.get('/ops', authMiddleware, async (req: Request, res: Response) => {
+  res.json(await getFleetGraphOps(req.workspaceId!));
 });
 
 router.get('/preferences', authMiddleware, async (req: Request, res: Response) => {
@@ -105,6 +166,96 @@ router.patch('/preferences', authMiddleware, async (req: Request, res: Response)
   });
 
   res.json(preferences);
+});
+
+router.get('/detectors', authMiddleware, async (req: Request, res: Response) => {
+  res.json(await listFleetGraphDetectorSettings(req.workspaceId!));
+});
+
+router.patch('/detectors/:detectorId', authMiddleware, async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
+
+  const parsed = detectorUpdateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid FleetGraph detector setting' });
+    return;
+  }
+
+  try {
+    const detectorId = Array.isArray(req.params.detectorId)
+      ? req.params.detectorId[0] ?? ''
+      : req.params.detectorId ?? '';
+    const detector = await upsertFleetGraphDetectorSetting({
+      workspaceId: req.workspaceId!,
+      detectorId,
+      updates: parsed.data,
+    });
+
+    await logAuditEvent({
+      workspaceId: req.workspaceId!,
+      actorUserId: req.userId!,
+      action: 'fleetgraph.detector_tuning_update',
+      resourceType: 'fleetgraph_detector',
+      resourceId: detector.id,
+      details: parsed.data,
+      req,
+    });
+
+    res.json(detector);
+  } catch (error) {
+    if (error instanceof UnknownFleetGraphDetectorError) {
+      res.status(404).json({ error: 'FleetGraph detector not found' });
+      return;
+    }
+    throw error;
+  }
+});
+
+router.get('/replay/scenarios', authMiddleware, async (req: Request, res: Response) => {
+  res.json(await listFleetGraphReplayScenarios(req.workspaceId!));
+});
+
+router.post('/replay/scenarios', authMiddleware, async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
+
+  const parsed = replayScenarioCreateSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: 'Invalid FleetGraph replay scenario' });
+    return;
+  }
+
+  const scenario = await createFleetGraphReplayScenario({
+    workspaceId: req.workspaceId!,
+    userId: req.userId!,
+    scenario: parsed.data,
+  });
+
+  res.status(201).json(scenario);
+});
+
+router.post('/replay/scenarios/:id/run', authMiddleware, async (req: Request, res: Response) => {
+  if (!requireAdmin(req, res)) return;
+
+  const scenarioId = parseUuidParam(req, res);
+  if (!scenarioId) return;
+
+  const status = getFleetGraphStatus();
+  if (!status.available) {
+    res.status(503).json({ error: 'FleetGraph is unavailable', missingConfiguration: status.missingConfiguration });
+    return;
+  }
+
+  const result = await runFleetGraphReplayScenario({
+    workspaceId: req.workspaceId!,
+    userId: req.userId!,
+    scenarioId,
+  });
+  if (!result) {
+    res.status(404).json({ error: 'FleetGraph replay scenario not found' });
+    return;
+  }
+
+  res.json(result);
 });
 
 router.post('/chat', authMiddleware, async (req: Request, res: Response) => {
@@ -698,6 +849,12 @@ function emptySourceCounts(): AssistantSourceCounts {
 
 function isAdmin(req: Request): boolean {
   return Boolean(req.isSuperAdmin || req.workspaceRole === 'admin');
+}
+
+function requireAdmin(req: Request, res: Response): boolean {
+  if (isAdmin(req)) return true;
+  res.status(403).json({ error: 'Workspace admin access required' });
+  return false;
 }
 
 function toIsoString(value: Date | string): string {

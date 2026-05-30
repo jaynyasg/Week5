@@ -3,10 +3,18 @@ import type {
   FleetGraphActionProposal,
   FleetGraphChatRequest,
   FleetGraphChatResponse,
+  FleetGraphDetectorSetting,
+  FleetGraphDetectorSettingsResponse,
+  FleetGraphDetectorUpdateRequest,
   FleetGraphFindingDetail,
   FleetGraphFindingsResponse,
   FleetGraphNotificationPreferences,
   FleetGraphNotificationPreferencesUpdateRequest,
+  FleetGraphOpsResponse,
+  FleetGraphReplayRunResponse,
+  FleetGraphReplayScenario,
+  FleetGraphReplayScenarioCreateRequest,
+  FleetGraphReplayScenariosResponse,
   FleetGraphRunSummary,
   FleetGraphStatusResponse,
   AssistantRouteContext,
@@ -17,6 +25,14 @@ export async function getFleetGraphStatus(): Promise<FleetGraphStatusResponse> {
   const response = await apiGet('/api/fleetgraph/status');
   if (!response.ok) {
     throw new Error('Failed to load FleetGraph status');
+  }
+  return response.json();
+}
+
+export async function getFleetGraphOps(): Promise<FleetGraphOpsResponse> {
+  const response = await apiGet('/api/fleetgraph/ops');
+  if (!response.ok) {
+    throw new Error('Failed to load FleetGraph ops');
   }
   return response.json();
 }
@@ -79,6 +95,51 @@ export async function updateFleetGraphNotificationPreferences(
   const response = await apiPatch('/api/fleetgraph/preferences', preferences);
   if (!response.ok) {
     throw new Error('Failed to update FleetGraph notification preferences');
+  }
+  return response.json();
+}
+
+export async function getFleetGraphDetectors(): Promise<FleetGraphDetectorSettingsResponse> {
+  const response = await apiGet('/api/fleetgraph/detectors');
+  if (!response.ok) {
+    throw new Error('Failed to load FleetGraph detector settings');
+  }
+  return response.json();
+}
+
+export async function updateFleetGraphDetector(
+  id: string,
+  updates: FleetGraphDetectorUpdateRequest,
+): Promise<FleetGraphDetectorSetting> {
+  const response = await apiPatch(`/api/fleetgraph/detectors/${id}`, updates);
+  if (!response.ok) {
+    throw new Error('Failed to update FleetGraph detector');
+  }
+  return response.json();
+}
+
+export async function getFleetGraphReplayScenarios(): Promise<FleetGraphReplayScenariosResponse> {
+  const response = await apiGet('/api/fleetgraph/replay/scenarios');
+  if (!response.ok) {
+    throw new Error('Failed to load FleetGraph replay scenarios');
+  }
+  return response.json();
+}
+
+export async function createFleetGraphReplayScenario(
+  scenario: FleetGraphReplayScenarioCreateRequest,
+): Promise<FleetGraphReplayScenario> {
+  const response = await apiPost('/api/fleetgraph/replay/scenarios', scenario);
+  if (!response.ok) {
+    throw new Error('Failed to create FleetGraph replay scenario');
+  }
+  return response.json();
+}
+
+export async function runFleetGraphReplayScenario(id: string): Promise<FleetGraphReplayRunResponse> {
+  const response = await apiPost(`/api/fleetgraph/replay/scenarios/${id}/run`, {});
+  if (!response.ok) {
+    throw new Error('Failed to run FleetGraph replay scenario');
   }
   return response.json();
 }

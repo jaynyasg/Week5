@@ -3,10 +3,16 @@ import { act, renderHook, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  createFleetGraphReplayScenario,
   getFleetGraphFindings,
+  getFleetGraphDetectors,
   getFleetGraphNotificationPreferences,
+  getFleetGraphOps,
+  getFleetGraphReplayScenarios,
   getFleetGraphStatus,
+  runFleetGraphReplayScenario,
   sendFleetGraphMessage,
+  updateFleetGraphDetector,
   updateFleetGraphNotificationPreferences,
 } from '@/services/fleetgraph';
 import { useFleetGraph } from './useFleetGraph';
@@ -17,21 +23,36 @@ vi.mock('@/services/fleetgraph', () => ({
   getFleetGraphFinding: vi.fn(),
   getFleetGraphRun: vi.fn(),
   getFleetGraphNotificationPreferences: vi.fn(),
+  getFleetGraphOps: vi.fn(),
+  getFleetGraphDetectors: vi.fn(),
+  getFleetGraphReplayScenarios: vi.fn(),
   sendFleetGraphMessage: vi.fn(),
   updateFleetGraphDelivery: vi.fn(),
   updateFleetGraphNotificationPreferences: vi.fn(),
   decideFleetGraphAction: vi.fn(),
+  updateFleetGraphDetector: vi.fn(),
+  createFleetGraphReplayScenario: vi.fn(),
+  runFleetGraphReplayScenario: vi.fn(),
 }));
 
 const getFleetGraphStatusMock = vi.mocked(getFleetGraphStatus);
 const getFleetGraphFindingsMock = vi.mocked(getFleetGraphFindings);
 const getFleetGraphNotificationPreferencesMock = vi.mocked(getFleetGraphNotificationPreferences);
+const getFleetGraphOpsMock = vi.mocked(getFleetGraphOps);
+const getFleetGraphDetectorsMock = vi.mocked(getFleetGraphDetectors);
+const getFleetGraphReplayScenariosMock = vi.mocked(getFleetGraphReplayScenarios);
 const sendFleetGraphMessageMock = vi.mocked(sendFleetGraphMessage);
 const updateFleetGraphNotificationPreferencesMock = vi.mocked(updateFleetGraphNotificationPreferences);
+const updateFleetGraphDetectorMock = vi.mocked(updateFleetGraphDetector);
+const createFleetGraphReplayScenarioMock = vi.mocked(createFleetGraphReplayScenario);
+const runFleetGraphReplayScenarioMock = vi.mocked(runFleetGraphReplayScenario);
 
 describe('useFleetGraph', () => {
   beforeEach(() => {
     getFleetGraphNotificationPreferencesMock.mockResolvedValue(notificationPreferences);
+    getFleetGraphOpsMock.mockResolvedValue(opsResponse);
+    getFleetGraphDetectorsMock.mockResolvedValue({ detectors: [] });
+    getFleetGraphReplayScenariosMock.mockResolvedValue({ scenarios: [] });
   });
 
   afterEach(() => {
@@ -145,6 +166,41 @@ describe('useFleetGraph', () => {
       });
     });
   });
+
+  it('updates detector settings and creates replay scenarios', async () => {
+    getFleetGraphStatusMock.mockResolvedValue(statusResponse);
+    getFleetGraphFindingsMock.mockResolvedValue({ findings: [], deliveries: [] });
+    updateFleetGraphDetectorMock.mockResolvedValue(detectorSetting);
+    createFleetGraphReplayScenarioMock.mockResolvedValue(replayScenario);
+    runFleetGraphReplayScenarioMock.mockResolvedValue({
+      scenario: replayScenario,
+      run: replayScenario.lastRun!,
+    });
+
+    const { result } = renderHook(() => useFleetGraph(), { wrapper: queryWrapper() });
+
+    act(() => result.current.updateDetector('stale-issue', {
+      enabled: false,
+      thresholds: { staleIssueDays: 14 },
+    }));
+    act(() => result.current.createReplayScenario({
+      name: 'Current context',
+      expected: { expectedStatus: 'completed', minFindings: 1 },
+    }));
+    act(() => result.current.runReplayScenario('scenario-1'));
+
+    await waitFor(() => {
+      expect(updateFleetGraphDetectorMock).toHaveBeenCalledWith('stale-issue', {
+        enabled: false,
+        thresholds: { staleIssueDays: 14 },
+      });
+      expect(createFleetGraphReplayScenarioMock).toHaveBeenCalledWith({
+        name: 'Current context',
+        expected: { expectedStatus: 'completed', minFindings: 1 },
+      });
+      expect(runFleetGraphReplayScenarioMock).toHaveBeenCalledWith('scenario-1');
+    });
+  });
 });
 
 function queryWrapper() {
@@ -202,4 +258,96 @@ const notificationPreferences = {
   toastActionRequired: true,
   showUnreadBadge: true,
   updatedAt: null,
+};
+
+const opsResponse = {
+  generatedAt: '2026-05-25T12:00:00.000Z',
+  queue: {
+    counts: {},
+    recentEvents: [],
+  },
+  runs: {
+    last24h: {
+      total: 0,
+      completed: 0,
+      failed: 0,
+      averageLatencyMs: null,
+      byStatus: {},
+    },
+    recent: [],
+    lastSuccessfulSweep: null,
+  },
+  findings: {
+    bySeverity: {},
+    byStatus: {},
+    byDetector: [],
+  },
+  proposals: {
+    pending: 0,
+    failed: 0,
+  },
+  costs: {
+    last24h: {
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostUsd: 0,
+    },
+    last30d: {
+      inputTokens: 0,
+      outputTokens: 0,
+      estimatedCostUsd: 0,
+    },
+  },
+  detectors: {
+    total: 9,
+    enabled: 9,
+    disabled: 0,
+  },
+};
+
+const detectorSetting = {
+  id: 'stale-issue',
+  label: 'Stale issue',
+  description: 'Active issue has not been updated recently.',
+  kind: 'stale_commitment' as const,
+  defaultSeverity: 'medium' as const,
+  noiseDefault: 'badge' as const,
+  windowDays: 7,
+  enabled: false,
+  severity: null,
+  thresholds: { staleIssueDays: 14 },
+  updatedAt: '2026-05-25T12:00:00.000Z',
+};
+
+const replayRun = {
+  id: 'replay-run-1',
+  scenarioId: 'scenario-1',
+  runId: 'run-1',
+  status: 'completed' as const,
+  score: 1,
+  report: {
+    total: 1,
+    passed: 1,
+    score: 1,
+    cases: [],
+  },
+  createdAt: '2026-05-25T12:00:00.000Z',
+};
+
+const replayScenario = {
+  id: 'scenario-1',
+  name: 'Current context',
+  description: '',
+  routeContext: {},
+  triggerType: 'manual_replay',
+  triggerId: null,
+  message: null,
+  expected: {
+    expectedStatus: 'completed' as const,
+    minFindings: 1,
+  },
+  createdByUserId: 'user-1',
+  createdAt: '2026-05-25T12:00:00.000Z',
+  updatedAt: '2026-05-25T12:00:00.000Z',
+  lastRun: replayRun,
 };

@@ -1,5 +1,6 @@
 import type { AssistantRouteContext, FleetGraphMode } from '@ship/shared';
 import { loadFleetGraphContext } from './context.js';
+import { getFleetGraphDetectorSettings } from './detector-settings.js';
 import { runFleetGraphWorkflow } from './graph.js';
 import {
   completeFleetGraphRun,
@@ -32,11 +33,15 @@ export async function runFleetGraph(input: {
   context?: FleetGraphContext;
   decision?: { status: 'approved' | 'rejected'; note?: string };
 }): Promise<FleetGraphRunResult> {
-  const context = input.context ?? await loadFleetGraphContext({
+  const baseContext = input.context ?? await loadFleetGraphContext({
     workspaceId: input.workspaceId,
     userId: input.userId ?? 'system',
     routeContext: input.routeContext,
   });
+  const context = {
+    ...baseContext,
+    detectorSettings: baseContext.detectorSettings ?? await getFleetGraphDetectorSettings(input.workspaceId),
+  };
   const threadId = makeFleetGraphThreadId({
     workspaceId: input.workspaceId,
     mode: input.mode,

@@ -13,6 +13,7 @@ describe('FleetGraph API', () => {
   let adminSessionCookie: string;
   let csrfToken: string;
   let otherCsrfToken: string;
+  let adminCsrfToken: string;
   let workspaceId: string;
   let userId: string;
   let otherUserId: string;
@@ -72,6 +73,15 @@ describe('FleetGraph API', () => {
     const otherConnectSidCookie = otherCsrfRes.headers['set-cookie']?.[0]?.split(';')[0] || '';
     if (otherConnectSidCookie) {
       otherSessionCookie = `${otherSessionCookie}; ${otherConnectSidCookie}`;
+    }
+
+    const adminCsrfRes = await request(app)
+      .get('/api/csrf-token')
+      .set('Cookie', adminSessionCookie);
+    adminCsrfToken = adminCsrfRes.body.token;
+    const adminConnectSidCookie = adminCsrfRes.headers['set-cookie']?.[0]?.split(';')[0] || '';
+    if (adminConnectSidCookie) {
+      adminSessionCookie = `${adminSessionCookie}; ${adminConnectSidCookie}`;
     }
 
     const documentResult = await pool.query(
@@ -323,6 +333,105 @@ describe('FleetGraph API', () => {
     expect(invalid.status).toBe(400);
   });
 
+  it('GET /api/fleetgraph/ops returns operations metrics', async () => {
+    const res = await request(app)
+      .get('/api/fleetgraph/ops')
+      .set('Cookie', sessionCookie);
+
+    expect(res.status).toBe(200);
+    expect(res.body.runs.last24h.total).toBeGreaterThanOrEqual(1);
+    expect(res.body.detectors.total).toBeGreaterThanOrEqual(9);
+    expect(res.body.findings.byDetector).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        detectorId: expect.any(String),
+        count: expect.any(Number),
+      }),
+    ]));
+  });
+
+  it('GET and PATCH /api/fleetgraph/detectors manage workspace detector tuning', async () => {
+    const list = await request(app)
+      .get('/api/fleetgraph/detectors')
+      .set('Cookie', sessionCookie);
+
+    expect(list.status).toBe(200);
+    expect(list.body.detectors).toEqual(expect.arrayContaining([
+      expect.objectContaining({
+        id: 'stale-issue',
+        thresholds: expect.objectContaining({ staleIssueDays: 7 }),
+      }),
+    ]));
+
+    const denied = await request(app)
+      .patch('/api/fleetgraph/detectors/stale-issue')
+      .set('Cookie', sessionCookie)
+      .set('x-csrf-token', csrfToken)
+      .send({ enabled: false });
+
+    expect(denied.status).toBe(403);
+
+    const updated = await request(app)
+      .patch('/api/fleetgraph/detectors/stale-issue')
+      .set('Cookie', adminSessionCookie)
+      .set('x-csrf-token', adminCsrfToken)
+      .send({
+        enabled: false,
+        severity: 'high',
+        thresholds: { staleIssueDays: 14 },
+      });
+
+    expect(updated.status).toBe(200);
+    expect(updated.body).toMatchObject({
+      id: 'stale-issue',
+      enabled: false,
+      severity: 'high',
+      thresholds: expect.objectContaining({ staleIssueDays: 14 }),
+    });
+  });
+
+  it('creates and runs replayable FleetGraph evaluation scenarios', async () => {
+    process.env.SHIP_FLEETGRAPH_PROVIDER = 'mock';
+
+    const created = await request(app)
+      .post('/api/fleetgraph/replay/scenarios')
+      .set('Cookie', adminSessionCookie)
+      .set('x-csrf-token', adminCsrfToken)
+      .send({
+        name: 'Route context replay',
+        routeContext: { documentId, path: `/documents/${documentId}` },
+        expected: {
+          expectedStatus: 'completed',
+          minFindings: 0,
+        },
+      });
+
+    expect(created.status).toBe(201);
+    expect(created.body).toMatchObject({
+      name: 'Route context replay',
+      expected: expect.objectContaining({ expectedStatus: 'completed' }),
+    });
+
+    const listed = await request(app)
+      .get('/api/fleetgraph/replay/scenarios')
+      .set('Cookie', sessionCookie);
+
+    expect(listed.status).toBe(200);
+    expect(listed.body.scenarios.map((scenario: { id: string }) => scenario.id)).toContain(created.body.id);
+
+    const run = await request(app)
+      .post(`/api/fleetgraph/replay/scenarios/${created.body.id}/run`)
+      .set('Cookie', adminSessionCookie)
+      .set('x-csrf-token', adminCsrfToken)
+      .send({});
+
+    expect(run.status).toBe(200);
+    expect(run.body.run).toMatchObject({
+      scenarioId: created.body.id,
+      status: 'completed',
+      score: expect.any(Number),
+    });
+  });
+
   it('GET /api/fleetgraph/findings filters to current document context', async () => {
     const res = await request(app)
       .get(`/api/fleetgraph/findings?documentId=${documentId}`)
@@ -465,8 +574,13 @@ describe('FleetGraph API', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.paths['/fleetgraph/status']).toBeDefined();
+    expect(res.body.paths['/fleetgraph/ops']).toBeDefined();
     expect(res.body.paths['/fleetgraph/chat']).toBeDefined();
     expect(res.body.paths['/fleetgraph/preferences']).toBeDefined();
+    expect(res.body.paths['/fleetgraph/detectors']).toBeDefined();
+    expect(res.body.paths['/fleetgraph/detectors/{detectorId}']).toBeDefined();
+    expect(res.body.paths['/fleetgraph/replay/scenarios']).toBeDefined();
+    expect(res.body.paths['/fleetgraph/replay/scenarios/{id}/run']).toBeDefined();
     expect(res.body.paths['/fleetgraph/findings']).toBeDefined();
     expect(res.body.paths['/fleetgraph/findings/{id}']).toBeDefined();
     expect(res.body.paths['/fleetgraph/deliveries/{id}']).toBeDefined();

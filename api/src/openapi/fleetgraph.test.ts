@@ -6,8 +6,13 @@ describe('FleetGraph OpenAPI schema', () => {
     const document = generateOpenAPIDocument();
 
     expect(document.paths['/fleetgraph/status']).toBeDefined();
+    expect(document.paths['/fleetgraph/ops']).toBeDefined();
     expect(document.paths['/fleetgraph/chat']).toBeDefined();
     expect(document.paths['/fleetgraph/preferences']).toBeDefined();
+    expect(document.paths['/fleetgraph/detectors']).toBeDefined();
+    expect(document.paths['/fleetgraph/detectors/{detectorId}']).toBeDefined();
+    expect(document.paths['/fleetgraph/replay/scenarios']).toBeDefined();
+    expect(document.paths['/fleetgraph/replay/scenarios/{id}/run']).toBeDefined();
     expect(document.paths['/fleetgraph/findings']).toBeDefined();
     expect(document.paths['/fleetgraph/findings/{id}']).toBeDefined();
     expect(document.paths['/fleetgraph/deliveries/{id}']).toBeDefined();

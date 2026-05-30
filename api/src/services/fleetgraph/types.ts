@@ -104,8 +104,17 @@ export interface FleetGraphContext {
   weekPlan?: FleetGraphRecordRef | null;
   issues: FleetGraphIssueRef[];
   history: FleetGraphHistoryRef[];
+  detectorSettings?: FleetGraphDetectorSettingsById;
   now: string;
 }
+
+export interface FleetGraphDetectorTuning {
+  enabled?: boolean;
+  severity?: FleetGraphFindingSeverity | null;
+  thresholds?: Record<string, number>;
+}
+
+export type FleetGraphDetectorSettingsById = Record<string, FleetGraphDetectorTuning>;
 
 export interface FleetGraphEvidenceRef {
   sourceType: 'document' | 'issue' | 'project' | 'program' | 'week' | 'timeline' | 'file';

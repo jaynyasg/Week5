@@ -17,6 +17,10 @@ const notificationPreferencesMigrationPath = resolve(
   '../../db/migrations/051_fleetgraph_notification_preferences.sql',
 );
 const costRollupsMigrationPath = resolve(__dirname, '../../db/migrations/052_fleetgraph_cost_rollups.sql');
+const opsTuningReplayMigrationPath = resolve(
+  __dirname,
+  '../../db/migrations/053_fleetgraph_ops_tuning_replay.sql',
+);
 
 describe('FleetGraph schema foundation', () => {
   let workspaceId: string;
@@ -31,12 +35,15 @@ describe('FleetGraph schema foundation', () => {
     const migrationSql = await readFile(migrationPath, 'utf8');
     const notificationPreferencesMigrationSql = await readFile(notificationPreferencesMigrationPath, 'utf8');
     const costRollupsMigrationSql = await readFile(costRollupsMigrationPath, 'utf8');
+    const opsTuningReplayMigrationSql = await readFile(opsTuningReplayMigrationPath, 'utf8');
     await pool.query(migrationSql);
     await pool.query(migrationSql);
     await pool.query(notificationPreferencesMigrationSql);
     await pool.query(notificationPreferencesMigrationSql);
     await pool.query(costRollupsMigrationSql);
     await pool.query(costRollupsMigrationSql);
+    await pool.query(opsTuningReplayMigrationSql);
+    await pool.query(opsTuningReplayMigrationSql);
 
     const workspaceResult = await pool.query(
       `INSERT INTO workspaces (name) VALUES ('FleetGraph Test') RETURNING id`,
@@ -100,9 +107,12 @@ describe('FleetGraph schema foundation', () => {
       [[
         'fleetgraph_action_proposals',
         'fleetgraph_deliveries',
+        'fleetgraph_detector_settings',
         'fleetgraph_event_queue',
         'fleetgraph_monthly_cost_rollups',
         'fleetgraph_notification_preferences',
+        'fleetgraph_replay_runs',
+        'fleetgraph_replay_scenarios',
         'fleetgraph_runs',
       ]],
     );
@@ -110,9 +120,12 @@ describe('FleetGraph schema foundation', () => {
     expect(tableResult.rows.map((row) => row.table_name)).toEqual([
       'fleetgraph_action_proposals',
       'fleetgraph_deliveries',
+      'fleetgraph_detector_settings',
       'fleetgraph_event_queue',
       'fleetgraph_monthly_cost_rollups',
       'fleetgraph_notification_preferences',
+      'fleetgraph_replay_runs',
+      'fleetgraph_replay_scenarios',
       'fleetgraph_runs',
     ]);
   });

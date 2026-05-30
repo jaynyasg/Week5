@@ -269,6 +269,15 @@ function fleetGraphState(overrides: Partial<ReturnType<typeof useFleetGraph>> = 
     },
     notificationPreferencesLoading: false,
     notificationPreferencesError: null,
+    ops: opsResponse,
+    opsLoading: false,
+    opsError: null,
+    detectors: [],
+    detectorsLoading: false,
+    detectorsError: null,
+    replayScenarios: [],
+    replayScenariosLoading: false,
+    replayScenariosError: null,
     messages: [],
     send: vi.fn(),
     sending: false,
@@ -283,11 +292,65 @@ function fleetGraphState(overrides: Partial<ReturnType<typeof useFleetGraph>> = 
     updateNotificationPreferences: vi.fn(),
     updatingNotificationPreferences: false,
     notificationPreferencesUpdateError: null,
+    updateDetector: vi.fn(),
+    updatingDetector: false,
+    detectorUpdateError: null,
+    createReplayScenario: vi.fn(),
+    creatingReplayScenario: false,
+    replayScenarioCreateError: null,
+    runReplayScenario: vi.fn(),
+    runningReplayScenario: false,
+    replayRunError: null,
     refresh: vi.fn(),
     reset: vi.fn(),
     ...overrides,
   };
 }
+
+const opsResponse = {
+  generatedAt: '2026-05-25T12:00:00.000Z',
+  queue: {
+    counts: {},
+    recentEvents: [],
+  },
+  runs: {
+    last24h: {
+      total: 1,
+      completed: 1,
+      failed: 0,
+      averageLatencyMs: 3000,
+      byStatus: { completed: 1 },
+    },
+    recent: [],
+    lastSuccessfulSweep: null,
+  },
+  findings: {
+    bySeverity: { high: 1 },
+    byStatus: { open: 1 },
+    byDetector: [{ detectorId: 'missing-approved-plan', count: 1, openCount: 1 }],
+  },
+  proposals: {
+    pending: 1,
+    failed: 0,
+  },
+  costs: {
+    last24h: {
+      inputTokens: 1200,
+      outputTokens: 280,
+      estimatedCostUsd: 0.000348,
+    },
+    last30d: {
+      inputTokens: 1200,
+      outputTokens: 280,
+      estimatedCostUsd: 0.000348,
+    },
+  },
+  detectors: {
+    total: 9,
+    enabled: 9,
+    disabled: 0,
+  },
+};
 
 const findingSummary: FleetGraphFindingSummary = {
   id: 'finding-1',

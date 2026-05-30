@@ -3,6 +3,7 @@ import { z, registry } from '../registry.js';
 const FleetGraphProviderSchema = z.enum(['openai', 'bedrock', 'mock', 'unconfigured']).openapi('FleetGraphProvider');
 const FleetGraphModeSchema = z.enum(['proactive', 'chat', 'manual']).openapi('FleetGraphMode');
 const FleetGraphRunStatusSchema = z.enum(['started', 'completed', 'failed', 'interrupted', 'cancelled']).openapi('FleetGraphRunStatus');
+const FleetGraphEventStatusSchema = z.enum(['queued', 'processing', 'completed', 'retrying', 'failed']).openapi('FleetGraphEventStatus');
 const FleetGraphFindingStatusSchema = z.enum(['open', 'acknowledged', 'resolved', 'dismissed']).openapi('FleetGraphFindingStatus');
 const FleetGraphFindingSeveritySchema = z.enum(['info', 'low', 'medium', 'high', 'critical']).openapi('FleetGraphFindingSeverity');
 const FleetGraphFindingKindSchema = z.enum([
@@ -230,6 +231,159 @@ const FleetGraphRunSummarySchema = z.object({
   completedAt: z.string().nullable(),
 }).openapi('FleetGraphRunSummary');
 
+const FleetGraphOpsSchema = z.object({
+  generatedAt: z.string(),
+  queue: z.object({
+    counts: z.record(z.number()),
+    recentEvents: z.array(z.object({
+      id: z.string().uuid(),
+      sourceEventType: z.string(),
+      sourceDocumentId: z.string().uuid().nullable(),
+      status: FleetGraphEventStatusSchema,
+      attemptCount: z.number(),
+      lastError: z.string().nullable(),
+      createdAt: z.string(),
+      updatedAt: z.string(),
+    })),
+  }),
+  runs: z.object({
+    last24h: z.object({
+      total: z.number(),
+      completed: z.number(),
+      failed: z.number(),
+      averageLatencyMs: z.number().nullable(),
+      byStatus: z.record(z.number()),
+    }),
+    recent: z.array(FleetGraphRunSummarySchema),
+    lastSuccessfulSweep: FleetGraphRunSummarySchema.nullable(),
+  }),
+  findings: z.object({
+    bySeverity: z.record(z.number()),
+    byStatus: z.record(z.number()),
+    byDetector: z.array(z.object({
+      detectorId: z.string(),
+      count: z.number(),
+      openCount: z.number(),
+    })),
+  }),
+  proposals: z.object({
+    pending: z.number(),
+    failed: z.number(),
+  }),
+  costs: z.object({
+    last24h: z.object({
+      inputTokens: z.number(),
+      outputTokens: z.number(),
+      estimatedCostUsd: z.number(),
+    }),
+    last30d: z.object({
+      inputTokens: z.number(),
+      outputTokens: z.number(),
+      estimatedCostUsd: z.number(),
+    }),
+  }),
+  detectors: z.object({
+    total: z.number(),
+    enabled: z.number(),
+    disabled: z.number(),
+  }),
+}).openapi('FleetGraphOps');
+
+const FleetGraphDetectorSettingSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  description: z.string(),
+  kind: FleetGraphFindingKindSchema,
+  defaultSeverity: FleetGraphFindingSeveritySchema,
+  noiseDefault: z.enum(['toast', 'badge']),
+  windowDays: z.number().nullable(),
+  enabled: z.boolean(),
+  severity: FleetGraphFindingSeveritySchema.nullable(),
+  thresholds: z.record(z.number()),
+  updatedAt: z.string().nullable(),
+}).openapi('FleetGraphDetectorSetting');
+
+const FleetGraphDetectorSettingsResponseSchema = z.object({
+  detectors: z.array(FleetGraphDetectorSettingSchema),
+}).openapi('FleetGraphDetectorSettingsResponse');
+
+const FleetGraphDetectorUpdateRequestSchema = z.object({
+  enabled: z.boolean().optional(),
+  severity: FleetGraphFindingSeveritySchema.nullable().optional(),
+  thresholds: z.record(z.number()).optional(),
+}).openapi('FleetGraphDetectorUpdateRequest');
+
+const FleetGraphReplayStatusSchema = z.enum(['completed', 'interrupted', 'failed']).openapi('FleetGraphReplayStatus');
+
+const FleetGraphReplayExpectedSchema = z.object({
+  expectedStatus: FleetGraphReplayStatusSchema,
+  minFindings: z.number().optional(),
+  expectedFindingKinds: z.array(FleetGraphFindingKindSchema).optional(),
+  expectedProposalActions: z.array(FleetGraphActionTypeSchema).optional(),
+  requiredAnswerTerms: z.array(z.string()).optional(),
+  expectedCitationTitles: z.array(z.string()).optional(),
+}).openapi('FleetGraphReplayExpected');
+
+const FleetGraphReplayReportSchema = z.object({
+  total: z.number(),
+  passed: z.number(),
+  score: z.number(),
+  cases: z.array(z.object({
+    id: z.string(),
+    passed: z.boolean(),
+    score: z.number(),
+    checks: z.record(z.boolean()),
+    missingFindingKinds: z.array(FleetGraphFindingKindSchema),
+    missingProposalActions: z.array(FleetGraphActionTypeSchema),
+    missingAnswerTerms: z.array(z.string()),
+    missingCitationTitles: z.array(z.string()),
+  })),
+}).openapi('FleetGraphReplayReport');
+
+const FleetGraphReplayRunSummarySchema = z.object({
+  id: z.string().uuid(),
+  scenarioId: z.string().uuid(),
+  runId: z.string().uuid().nullable(),
+  status: FleetGraphReplayStatusSchema,
+  score: z.number(),
+  report: FleetGraphReplayReportSchema,
+  createdAt: z.string(),
+}).openapi('FleetGraphReplayRunSummary');
+
+const FleetGraphReplayScenarioSchema = z.object({
+  id: z.string().uuid(),
+  name: z.string(),
+  description: z.string(),
+  routeContext: FleetGraphRouteContextSchema,
+  triggerType: z.string(),
+  triggerId: z.string().uuid().nullable(),
+  message: z.string().nullable(),
+  expected: FleetGraphReplayExpectedSchema,
+  createdByUserId: z.string().uuid().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
+  lastRun: FleetGraphReplayRunSummarySchema.nullable(),
+}).openapi('FleetGraphReplayScenario');
+
+const FleetGraphReplayScenariosResponseSchema = z.object({
+  scenarios: z.array(FleetGraphReplayScenarioSchema),
+}).openapi('FleetGraphReplayScenariosResponse');
+
+const FleetGraphReplayScenarioCreateRequestSchema = z.object({
+  name: z.string().min(1).max(120),
+  description: z.string().max(1000).optional(),
+  routeContext: FleetGraphRouteContextSchema.optional(),
+  triggerType: z.string().optional(),
+  triggerId: z.string().uuid().nullable().optional(),
+  message: z.string().nullable().optional(),
+  expected: FleetGraphReplayExpectedSchema,
+}).openapi('FleetGraphReplayScenarioCreateRequest');
+
+const FleetGraphReplayRunResponseSchema = z.object({
+  scenario: FleetGraphReplayScenarioSchema,
+  run: FleetGraphReplayRunSummarySchema,
+}).openapi('FleetGraphReplayRunResponse');
+
 const FleetGraphDeliveryUpdateRequestSchema = z.object({
   status: z.enum(['read', 'dismissed', 'snoozed']),
   snoozedUntil: z.string().datetime().optional(),
@@ -254,6 +408,17 @@ registry.register('FleetGraphFindingDetail', FleetGraphFindingDetailSchema);
 registry.register('FleetGraphNotificationPreferences', FleetGraphNotificationPreferencesSchema);
 registry.register('FleetGraphNotificationPreferencesUpdateRequest', FleetGraphNotificationPreferencesUpdateRequestSchema);
 registry.register('FleetGraphRunSummary', FleetGraphRunSummarySchema);
+registry.register('FleetGraphOps', FleetGraphOpsSchema);
+registry.register('FleetGraphDetectorSetting', FleetGraphDetectorSettingSchema);
+registry.register('FleetGraphDetectorSettingsResponse', FleetGraphDetectorSettingsResponseSchema);
+registry.register('FleetGraphDetectorUpdateRequest', FleetGraphDetectorUpdateRequestSchema);
+registry.register('FleetGraphReplayExpected', FleetGraphReplayExpectedSchema);
+registry.register('FleetGraphReplayReport', FleetGraphReplayReportSchema);
+registry.register('FleetGraphReplayRunSummary', FleetGraphReplayRunSummarySchema);
+registry.register('FleetGraphReplayScenario', FleetGraphReplayScenarioSchema);
+registry.register('FleetGraphReplayScenariosResponse', FleetGraphReplayScenariosResponseSchema);
+registry.register('FleetGraphReplayScenarioCreateRequest', FleetGraphReplayScenarioCreateRequestSchema);
+registry.register('FleetGraphReplayRunResponse', FleetGraphReplayRunResponseSchema);
 registry.register('FleetGraphDeliveryUpdateRequest', FleetGraphDeliveryUpdateRequestSchema);
 registry.register('FleetGraphActionDecisionRequest', FleetGraphActionDecisionRequestSchema);
 registry.register('FleetGraphActionDecisionResponse', FleetGraphActionDecisionResponseSchema);
@@ -268,6 +433,21 @@ registry.registerPath({
     200: {
       description: 'FleetGraph availability and limits',
       content: { 'application/json': { schema: FleetGraphStatusSchema } },
+    },
+    401: { description: 'Authentication required' },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/fleetgraph/ops',
+  tags: ['FleetGraph'],
+  summary: 'Inspect FleetGraph operational health',
+  description: 'Returns recent runs, queue depth, detector counts, failure counts, latency, and token cost aggregates for the active workspace.',
+  responses: {
+    200: {
+      description: 'FleetGraph operations dashboard data',
+      content: { 'application/json': { schema: FleetGraphOpsSchema } },
     },
     401: { description: 'Authentication required' },
   },
@@ -299,6 +479,104 @@ registry.registerPath({
       description: 'FleetGraph provider or checkpoint configuration is unavailable',
       content: { 'application/json': { schema: FleetGraphChatResponseSchema } },
     },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/fleetgraph/detectors',
+  tags: ['FleetGraph'],
+  summary: 'List FleetGraph detectors and tuning',
+  description: 'Returns registry metadata plus workspace-level enablement, severity overrides, and thresholds for each FleetGraph detector.',
+  responses: {
+    200: {
+      description: 'Detector settings',
+      content: { 'application/json': { schema: FleetGraphDetectorSettingsResponseSchema } },
+    },
+    401: { description: 'Authentication required' },
+  },
+});
+
+registry.registerPath({
+  method: 'patch',
+  path: '/fleetgraph/detectors/{detectorId}',
+  tags: ['FleetGraph'],
+  summary: 'Update FleetGraph detector tuning',
+  description: 'Allows workspace admins to enable/disable a detector, override severity, or adjust detector thresholds.',
+  request: {
+    params: z.object({ detectorId: z.string() }),
+    body: {
+      content: { 'application/json': { schema: FleetGraphDetectorUpdateRequestSchema } },
+    },
+  },
+  responses: {
+    200: {
+      description: 'Updated detector setting',
+      content: { 'application/json': { schema: FleetGraphDetectorSettingSchema } },
+    },
+    400: { description: 'Invalid detector setting' },
+    401: { description: 'Authentication required' },
+    403: { description: 'Workspace admin access required' },
+    404: { description: 'Detector not found' },
+  },
+});
+
+registry.registerPath({
+  method: 'get',
+  path: '/fleetgraph/replay/scenarios',
+  tags: ['FleetGraph'],
+  summary: 'List FleetGraph replay scenarios',
+  description: 'Returns saved Ship-state replay scenarios and the latest replay result for each scenario.',
+  responses: {
+    200: {
+      description: 'Replay scenarios',
+      content: { 'application/json': { schema: FleetGraphReplayScenariosResponseSchema } },
+    },
+    401: { description: 'Authentication required' },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/fleetgraph/replay/scenarios',
+  tags: ['FleetGraph'],
+  summary: 'Create a FleetGraph replay scenario',
+  description: 'Saves a route-context snapshot and expected checks that can be replayed against the graph later.',
+  request: {
+    body: {
+      content: { 'application/json': { schema: FleetGraphReplayScenarioCreateRequestSchema } },
+    },
+  },
+  responses: {
+    201: {
+      description: 'Created replay scenario',
+      content: { 'application/json': { schema: FleetGraphReplayScenarioSchema } },
+    },
+    400: { description: 'Invalid replay scenario' },
+    401: { description: 'Authentication required' },
+    403: { description: 'Workspace admin access required' },
+  },
+});
+
+registry.registerPath({
+  method: 'post',
+  path: '/fleetgraph/replay/scenarios/{id}/run',
+  tags: ['FleetGraph'],
+  summary: 'Run a FleetGraph replay scenario',
+  description: 'Runs the graph against a saved scenario and records an evaluation report for regression testing and demo refreshes.',
+  request: {
+    params: z.object({ id: z.string().uuid() }),
+  },
+  responses: {
+    200: {
+      description: 'Replay run result',
+      content: { 'application/json': { schema: FleetGraphReplayRunResponseSchema } },
+    },
+    400: { description: 'Invalid scenario ID' },
+    401: { description: 'Authentication required' },
+    403: { description: 'Workspace admin access required' },
+    404: { description: 'Replay scenario not found' },
+    503: { description: 'FleetGraph provider or checkpoint configuration is unavailable' },
   },
 });
 

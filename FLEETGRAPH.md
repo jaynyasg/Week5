@@ -1,6 +1,6 @@
 # FleetGraph Design
 
-Last reviewed: 2026-05-29
+Last reviewed: 2026-05-30
 
 FleetGraph is Ship's project intelligence agent. It reads real Ship project state, reasons over program, project, week, issue, and accountability signals, and surfaces timely findings inside the existing Ship experience.
 
@@ -15,6 +15,7 @@ Submission status:
 - MVP requirements are documented with real Ship data, public deployment evidence, shared LangSmith trace links, and a public timed latency run.
 - Final cost analysis is documented with measured FleetGraph run costs, token counts, and production projections for 100, 1,000, and 10,000 users.
 - Post-MVP design review improvements are documented and implemented: expanded detector registry, additional detector types, visual mockups/state matrices, notification preferences, and long-term retention/cost rollup policy.
+- Post-MVP production-trust improvements are implemented: FleetGraph ops dashboard, per-workspace detector tuning controls, and replayable evaluation scenarios.
 - Public LangSmith traces are complete for the MVP graph paths and the four added detector-expansion paths. The expansion traces were audited on 2026-05-29 before sharing; no password, cookie, authorization, bearer-token, API-key, private-key, or email patterns were detected.
 
 ## Agent Responsibility
@@ -138,7 +139,7 @@ The latency target is less than 5 minutes from Ship event to surfaced finding. T
 
 ### Detector Catalog
 
-FleetGraph detectors are plain functions in `api/src/services/fleetgraph/detectors.ts` that read the Ship evidence bundle and return finding candidates. The graph can add more detectors without changing the queue, persistence, or UI contracts. Each detector is registered in `fleetGraphDetectorRegistry` with metadata for detector ID, kind, default severity, notification/noise default, and history window when applicable.
+FleetGraph detectors are plain functions in `api/src/services/fleetgraph/detectors.ts` that read the Ship evidence bundle and return finding candidates. The graph can add more detectors without changing the queue, persistence, or UI contracts. Each detector is registered in `fleetGraphDetectorRegistry` with metadata for detector ID, kind, default severity, notification/noise default, and history window when applicable. Workspace-level tuning is stored in `fleetgraph_detector_settings`, so admins can disable noisy detectors, override severity, or adjust thresholds without code changes.
 
 Implemented detectors:
 
@@ -201,8 +202,14 @@ Backend endpoints should be separate from Ask Ship:
 
 - `GET /api/fleetgraph/status`
 - `POST /api/fleetgraph/chat`
+- `GET /api/fleetgraph/ops`
 - `GET /api/fleetgraph/findings`
 - `GET /api/fleetgraph/findings/:id`
+- `GET /api/fleetgraph/detectors`
+- `PATCH /api/fleetgraph/detectors/:detectorId`
+- `GET /api/fleetgraph/replay/scenarios`
+- `POST /api/fleetgraph/replay/scenarios`
+- `POST /api/fleetgraph/replay/scenarios/:id/run`
 - `PATCH /api/fleetgraph/deliveries/:id`
 - `GET /api/fleetgraph/runs/:id`
 - `POST /api/fleetgraph/actions/:id/decision`
@@ -210,6 +217,18 @@ Backend endpoints should be separate from Ask Ship:
 Delivery updates accept `read`, `dismissed`, or `snoozed` status. Snoozed deliveries require `snoozedUntil`. Action decisions accept `approved` or `rejected` status plus an optional note.
 
 All routes must be registered with OpenAPI following Ship's route/schema pattern.
+
+### Operations, Tuning, And Replay Harness
+
+FleetGraph now has three production-trust surfaces inside the existing drawer:
+
+| Surface | Purpose | Evidence |
+|---|---|---|
+| Ops dashboard | Shows queue depth, recent runs, detector volume, pending HITL gates, average latency, and token cost. | `GET /api/fleetgraph/ops`, `web/src/components/assistant/fleetgraph/FleetGraphPanel.tsx` |
+| Detector tuning | Lists registry metadata and lets workspace admins enable/disable detectors, override severity, and save thresholds such as stale issue days or churn windows. | `fleetgraph_detector_settings`, `GET/PATCH /api/fleetgraph/detectors` |
+| Replay harness | Saves current route context plus expected checks, reruns the graph as a manual replay, and stores an evaluation report. | `fleetgraph_replay_scenarios`, `fleetgraph_replay_runs`, `POST /api/fleetgraph/replay/scenarios/:id/run` |
+
+The replay harness extends the deterministic `eval-harness.ts` scoring model into the app. It is intended for demo refreshes, regression testing, and LangSmith trace regeneration when Ship state changes.
 
 ### Focused UI Design Review
 
@@ -230,6 +249,7 @@ The plan now specifies the high-risk UI surfaces that would otherwise be left to
 | More detection types | Added overdue milestone, workload imbalance, scope churn rate, and RACI drift detectors; registry metadata defines IDs, default severity, noise defaults, and history windows. |
 | Visual mockups | Added five mockups plus state matrices for inbox rows and approval gates in `docs/fleetgraph-visual-mockups.md`. |
 | Long-term retention policy | Added daily retention command, monthly cost rollups, terminal run pruning, resolved-finding soft delete, checkpoint cleanup, and audit retention for HITL proposals. |
+| Production-trust surfaces | Added ops dashboard, detector tuning controls, and replayable evaluation scenarios to make FleetGraph operable after the demo. |
 
 #### What Already Exists To Reuse
 

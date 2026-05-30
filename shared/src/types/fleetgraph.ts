@@ -205,6 +205,161 @@ export interface FleetGraphRunSummary {
   completedAt: string | null;
 }
 
+export interface FleetGraphOpsResponse {
+  generatedAt: string;
+  queue: {
+    counts: Partial<Record<FleetGraphEventStatus, number>>;
+    recentEvents: Array<{
+      id: string;
+      sourceEventType: string;
+      sourceDocumentId: string | null;
+      status: FleetGraphEventStatus;
+      attemptCount: number;
+      lastError: string | null;
+      createdAt: string;
+      updatedAt: string;
+    }>;
+  };
+  runs: {
+    last24h: {
+      total: number;
+      completed: number;
+      failed: number;
+      averageLatencyMs: number | null;
+      byStatus: Partial<Record<FleetGraphRunStatus, number>>;
+    };
+    recent: FleetGraphRunSummary[];
+    lastSuccessfulSweep: FleetGraphRunSummary | null;
+  };
+  findings: {
+    bySeverity: Partial<Record<FleetGraphFindingSeverity, number>>;
+    byStatus: Partial<Record<FleetGraphFindingStatus, number>>;
+    byDetector: Array<{
+      detectorId: string;
+      count: number;
+      openCount: number;
+    }>;
+  };
+  proposals: {
+    pending: number;
+    failed: number;
+  };
+  costs: {
+    last24h: {
+      inputTokens: number;
+      outputTokens: number;
+      estimatedCostUsd: number;
+    };
+    last30d: {
+      inputTokens: number;
+      outputTokens: number;
+      estimatedCostUsd: number;
+    };
+  };
+  detectors: {
+    total: number;
+    enabled: number;
+    disabled: number;
+  };
+}
+
+export interface FleetGraphDetectorSetting {
+  id: string;
+  label: string;
+  description: string;
+  kind: FleetGraphFindingKind;
+  defaultSeverity: FleetGraphFindingSeverity;
+  noiseDefault: 'toast' | 'badge';
+  windowDays: number | null;
+  enabled: boolean;
+  severity: FleetGraphFindingSeverity | null;
+  thresholds: Record<string, number>;
+  updatedAt: string | null;
+}
+
+export interface FleetGraphDetectorSettingsResponse {
+  detectors: FleetGraphDetectorSetting[];
+}
+
+export interface FleetGraphDetectorUpdateRequest {
+  enabled?: boolean;
+  severity?: FleetGraphFindingSeverity | null;
+  thresholds?: Record<string, number>;
+}
+
+export type FleetGraphReplayStatus = 'completed' | 'interrupted' | 'failed';
+
+export interface FleetGraphReplayExpected {
+  expectedStatus: FleetGraphReplayStatus;
+  minFindings?: number;
+  expectedFindingKinds?: FleetGraphFindingKind[];
+  expectedProposalActions?: FleetGraphActionType[];
+  requiredAnswerTerms?: string[];
+  expectedCitationTitles?: string[];
+}
+
+export interface FleetGraphReplayCaseResult {
+  id: string;
+  passed: boolean;
+  score: number;
+  checks: Record<string, boolean>;
+  missingFindingKinds: FleetGraphFindingKind[];
+  missingProposalActions: FleetGraphActionType[];
+  missingAnswerTerms: string[];
+  missingCitationTitles: string[];
+}
+
+export interface FleetGraphReplayReport {
+  total: number;
+  passed: number;
+  score: number;
+  cases: FleetGraphReplayCaseResult[];
+}
+
+export interface FleetGraphReplayRunSummary {
+  id: string;
+  scenarioId: string;
+  runId: string | null;
+  status: FleetGraphReplayStatus;
+  score: number;
+  report: FleetGraphReplayReport;
+  createdAt: string;
+}
+
+export interface FleetGraphReplayScenario {
+  id: string;
+  name: string;
+  description: string;
+  routeContext: AssistantRouteContext;
+  triggerType: string;
+  triggerId: string | null;
+  message: string | null;
+  expected: FleetGraphReplayExpected;
+  createdByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  lastRun: FleetGraphReplayRunSummary | null;
+}
+
+export interface FleetGraphReplayScenariosResponse {
+  scenarios: FleetGraphReplayScenario[];
+}
+
+export interface FleetGraphReplayScenarioCreateRequest {
+  name: string;
+  description?: string;
+  routeContext?: AssistantRouteContext;
+  triggerType?: string;
+  triggerId?: string | null;
+  message?: string | null;
+  expected: FleetGraphReplayExpected;
+}
+
+export interface FleetGraphReplayRunResponse {
+  scenario: FleetGraphReplayScenario;
+  run: FleetGraphReplayRunSummary;
+}
+
 export interface FleetGraphActionProposal {
   id: string;
   findingDocumentId: string | null;
