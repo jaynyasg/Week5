@@ -1,186 +1,242 @@
 # Final Submission Demo Script
 
-Purpose: 4–5 minute reviewer demo for the FleetGraph Final Submission. Target 4:30. This script covers all PRD rubric items across all four checkpoints, with emphasis on the Cost Analysis section newly due at Final Submission.
+Purpose: 4-5 minute reviewer demo for the FleetGraph Final Submission. Target 4:30. This version should mainly answer: **what changed after the Early Submission?** It includes a short FleetGraph recap, then focuses on final-submission additions: cost analysis, detector expansion, design/retention work, Ask Ship integration, notification preferences, ops dashboard, detector tuning, and replayable evaluation scenarios.
 
-Final Submission adds to Early Submission:
-- Cost Analysis: development spend with token breakdown, production cost projections at 3 scales with full assumptions.
-- Design-review expansion documentation: four additional detectors, visual mockups/state matrices, and retention/cost rollup policy.
+Early Submission already covered:
+- MVP graph behavior, real Ship data, public deployment, HITL gate, UI drawer, notifications, test cases, and architecture decisions.
+- Six MVP LangSmith traces showing proactive finding-only, HITL interrupt, and on-demand chat paths.
+
+Final Submission adds:
+- Cost Analysis: actual development spend, token breakdown, and production projections at 100 / 1,000 / 10,000 users.
+- Expanded detector work: overdue milestones, workload imbalance, scope churn rate, and RACI drift.
+- Design-review follow-through: mockup/state documentation, drawer state hierarchy, approval gate states, notification preferences, and retention policy.
+- Production-trust surfaces: FleetGraph ops dashboard, detector tuning controls, and replayable evaluation scenarios.
+- Cross-surface intelligence: FleetGraph findings indexed into Ask Ship retrieval.
 
 ## Before Recording
 
 Open these tabs before starting:
 
 1. Deployed app: `https://ship-wf2i.onrender.com`
-2. `FLEETGRAPH.md` — open to the top
-3. `PRESEARCH.md`
-4. LangSmith proactive finding trace: `https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r`
-5. LangSmith HITL/action proposal trace: `https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r`
-6. LangSmith on-demand chat trace: `https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r`
+2. `FLEETGRAPH.md` -> top of the file
+3. `FLEETGRAPH.md` -> `Performance and Cost`
+4. `FLEETGRAPH.md` -> `Operations, Tuning, And Replay Harness`
+5. `FLEETGRAPH.md` -> `Design Review Completion`
+6. Deployed FleetGraph drawer open to: Findings, Ops, Tuning, Replay
+7. Ask Ship drawer ready with: `What's at risk on this project?`
+8. Optional LangSmith tabs if asked to show prior evidence:
+   - Proactive finding trace: `https://smith.langchain.com/public/129c549c-b082-4377-ac3c-0cf78a2b687e/r`
+   - HITL/action proposal trace: `https://smith.langchain.com/public/fdca7b9c-92be-45a0-95a0-3a725bf6d344/r`
+   - On-demand chat trace: `https://smith.langchain.com/public/6a0f01b2-5255-4d04-9161-0da6e93d52b9/r`
 
-Do not show local login files, session cookies, bearer tokens, or Render environment variables. If the deployed app is slow, use the Deployment Evidence table in `FLEETGRAPH.md`.
+Do not show local login files, session cookies, bearer tokens, or Render environment variables. Do not spend time re-walking every MVP trace unless the reviewer asks; the final demo should emphasize the delta after Early Submission.
 
 ---
 
-## 0:00–0:20 — Opening
+## 0:00-0:25 — Brief Project Recap
 
 Show the top of `FLEETGRAPH.md`.
 
 Say:
 
-> This is my FleetGraph Final Submission. FleetGraph is a Ship-native project intelligence agent: it reads real project, week, issue, timeline, ownership, and document-history data; proactively detects risks without being asked; records durable findings; and gives engineers, PMs, and directors a context-aware assistant inside the existing Ship UI. This submission covers all rubric items: agent responsibility, graph, use cases, trigger model, test cases, architecture decisions, and cost analysis, plus the design-review expansion work.
+> FleetGraph is a Ship-native project intelligence agent. It reads real Ship project, issue, week, timeline, ownership, approval, and document-history data; proactively detects delivery risks; records durable findings; and exposes those findings inside Ship's existing assistant drawer.
+
+Then say:
+
+> The Early Submission already proved the core graph: deployed app, real Ship data, proactive detection under five minutes, LangSmith traces, human-in-the-loop approval, and architecture decisions. This final demo focuses on what changed after that checkpoint.
+
+Point briefly at:
+- `Agent Responsibility`
+- `Graph Diagram`
+- `Trigger Model`
+
+Say:
+
+> Those baseline sections are still here for rubric completeness, but I am not going to spend most of the final demo re-presenting the Early Submission.
 
 ---
 
-## 0:20–1:00 — Agent Responsibility, Graph, and Trigger Model
+## 0:25-1:15 — Final Deliverable: Cost Analysis
 
-Show `Agent Responsibility`, `Graph Diagram`, and `Trigger Model` in `FLEETGRAPH.md`.
-
-Say:
-
-> FleetGraph monitors week plans, project timelines, issue state, RACI ownership, and approval signals. It can create findings, deliver notifications, and record run metadata autonomously. It cannot mutate any Ship document without a signed-in human approving the action. Notification routing follows Ship ownership: issue risk goes to the assignee; project risk escalates to the project owner, accountable, and program accountable.
-
-Point at the Mermaid graph diagram and say:
-
-> The graph normalizes context, loads real Ship rows, detects conditions, ranks severity, chooses an audience, and either persists a finding or interrupts for human approval. Both the proactive and on-demand modes run through the same graph — the trigger is different, not the graph.
-
-Point at the Trigger Model section and say:
-
-> I chose a hybrid trigger model. Ship mutation paths enqueue durable jobs for low latency on fresh events. A scheduled drain plus sweep catches missed events, restarts, and stale state. Worst-case latency is the drain cadence — verified at 15.3 seconds on the public deployment.
-
----
-
-## 1:00–1:50 — Test Cases and LangSmith Traces
-
-Scroll to the **Test Cases** section in `FLEETGRAPH.md`.
+Scroll to `Performance and Cost`.
 
 Say:
 
-> The test table now has six MVP trace-backed use cases plus four design-review expansion detector cases. The MVP evidence has six shared LangSmith traces generated from real Ship rows, covering three distinct execution paths. The expansion rows document overdue milestones, workload imbalance, scope churn, and RACI drift with deterministic detector tests plus deployed Ship runs and audited public LangSmith trace links.
+> The biggest new Final Submission requirement is the cost analysis. I added actual tracked development and testing spend, token breakdown, average cost per graph run, and production projections at three scales.
 
-Show the three key traces:
-
-**Proactive finding-only path** — trace `129c549c`:
-
-> Ship week document with no approved plan. FleetGraph detects the planning gap, persists a finding, creates delivery state, and notifies the week owner — no human required.
-
-**HITL interrupt path** — trace `fdca7b9c`:
-
-> An approved plan changes after approval. FleetGraph detects the drift and interrupts the graph. The trace shows the LangGraph checkpoint paused at the approval gate. Nothing mutates until a signed-in human approves or rejects.
-
-**On-demand chat path** — trace `6a0f01b2`:
-
-> User opens FleetGraph from a project route. The context node reads the route path and document ID. The graph loads live Ship data for that project and returns a grounded answer citing real records.
-
-Say:
-
-> A graph that looks identical across every run is a pipeline, not a graph. These three traces show distinct branching: finding-only, HITL interrupt, and context-scoped chat.
-
----
-
-## 1:50–2:40 — Architecture Decisions
-
-Scroll to the **Architecture Decisions** section in `FLEETGRAPH.md`.
-
-Say:
-
-> Four key decisions shaped this architecture.
-
-Walk through each quickly:
-
-**LangGraph with Postgres checkpointer** — for resumable HITL interrupts and stable thread IDs that tie LangGraph checkpoints to Ship run rows.
-
-**Parallel fetch in Load Ship context** — project, week, issue, timeline, and accountability queries run concurrently. The longest query dominates; queries do not sum.
-
-**Idempotency keys over caching** — state persists between runs in finding documents and the event queue. No in-memory cache, no TTL edge cases. The same condition produces at most one open finding per state window.
-
-**Render cron drain inside the existing Ship process** — no separate worker, no second service to monitor. The drain command shares the web server's process and database connection pool. Right-sized for MVP scale.
-
----
-
-## 2:40–3:20 — Cost Analysis
-
-Scroll to the **Performance and Cost** section in `FLEETGRAPH.md`.
-
-Say:
-
-> The cost analysis covers actual development spend and production projections.
-
-Call out development spend:
-
-- Model: `gpt-4o-mini` — chosen for low cost per token on short reasoning tasks
+Call out:
+- Model: `gpt-4o-mini`
 - Six shared real/model LangSmith runs: `7,293` input tokens, `1,747` output tokens, `$0.002096`
 - Average per real/model run: `$0.000349`
 - Public deployed run: `$0.000305`
 - Total tracked development/test spend: `$0.002651`
+- Claude API runtime cost: `$0.00`, because FleetGraph runtime uses OpenAI
 
 Say:
 
-> The graph runtime made zero Claude API calls — the provider is OpenAI gpt-4o-mini, so FleetGraph Claude API cost is $0.00. Development assistant billing is separate from graph runtime and not exposed to the repository.
+> For production, the assumptions are explicit: one active project per user, twelve proactive runs per project per day, three on-demand invocations per user per day, and gpt-4o-mini pricing. That gives monthly estimates of $52.92 for 100 users, $529.20 for 1,000 users, and $5,292.00 for 10,000 users.
 
-Show the production projections table and say:
+Point at the projection table and say:
 
-> At one active project per user, twelve proactive runs per project per day, and three on-demand invocations per user per day — using gpt-4o-mini pricing at $0.15 per million input tokens and $0.60 per million output tokens — the monthly estimate is $52.92 for 100 users, $529.20 for 1,000 users, and $5,292.00 for 10,000 users. The main cost cliff is projects with many open issues, which inflate the evidence bundle size and push individual runs toward the upper end of the per-run range.
+> The main risk in the cost model is not user count by itself; it is large projects with many open issues, because bigger evidence bundles increase tokens per run.
 
 ---
 
-## 3:20–3:55 — Deployed System and UI
+## 1:15-2:05 — Detector Expansion After Early Submission
 
-Show the deployed app or Deployment Evidence in `FLEETGRAPH.md`.
+Scroll to the detector catalog, use cases, or `Expanded Detector Verification Details`.
 
 Say:
 
-> The system is deployed and publicly accessible at `https://ship-wf2i.onrender.com`. FleetGraph status returns enabled with proactive mode on, LangSmith tracing on, OpenAI provider, gpt-4o-mini model. The public timed latency run passed at 15.3 seconds — well inside the five-minute target.
+> After Early Submission, I expanded FleetGraph from the MVP detector set into a more scalable detector architecture. Detectors are registry-backed functions with metadata for ID, kind, default severity, notification/noise defaults, and history windows.
 
-Show the FleetGraph drawer in the deployed app (or the UI Integration section):
+Call out the new detector types:
+- Overdue milestones: uses project timeline fields like `target_date`, `due_date`, `planned_end_date`, and `end_date`
+- Workload imbalance: compares active issue counts and estimates by assignee
+- Scope churn rate: uses `document_history` to detect repeated scope-related changes
+- RACI drift: uses ownership/accountability history to detect repeated role changes
 
-> FleetGraph is not a standalone chatbot page. It is a mode inside Ship's existing assistant drawer. The findings inbox shows delivered findings with severity markers, status, and age. Finding detail shows evidence, trace metadata, and action proposal controls. Notification badges and severity-aware toasts keep interruptions proportional — critical and high findings trigger a toast; medium and low increment the badge only. Human approval is required before any mutation to a Ship document, and the approval controls enforce Ship's existing authorization rules.
+Say:
+
+> The key design point is that adding a detector does not require a new graph. Each detector takes the same Ship evidence bundle and returns candidates. The graph ranking, persistence, notification, tracing, and UI paths stay shared.
+
+Point at test/evidence rows and say:
+
+> These expansion cases are documented in `FLEETGRAPH.md`, backed by deterministic detector tests, and also exercised through deployed Ship runs with audited public LangSmith trace links.
 
 ---
 
-## 3:55–4:20 — PRESEARCH and Close
+## 2:05-2:45 — Design Review Follow-Through
 
-Show `PRESEARCH.md`.
+Scroll to `Design Review Completion`.
 
 Say:
 
-> The two root deliverables are PRESEARCH.md and FLEETGRAPH.md. Presearch answers all nine checklist questions across agent responsibility, graph architecture, and deployment — sources reviewed, engineering decisions made before any code was written.
+> The design review found three gaps after the MVP: more detector types, visual mockups, and long-term retention. I closed those as documentation and implementation work instead of just leaving them as notes.
 
-Return to the top of `FLEETGRAPH.md` and say:
+Walk through quickly:
 
-> The full submission: a deployed graph running against real Ship data, proactive detection under five minutes, six LangSmith traces showing three distinct execution paths, a human-in-the-loop gate using LangGraph interrupts, an embedded context-aware chat interface, per-user notification delivery, documented architecture decisions, expanded detector documentation, and a cost model with measured development spend and defended production projections.
+**More detection types:**
+
+> Added the four expansion detectors plus registry metadata, severity defaults, noise defaults, and detector tests.
+
+**Visual mockups:**
+
+> Documented the drawer hierarchy and key states: unread, read, snoozed, dismissed, evidence detail, trace detail, action proposal states, notification preferences, and mobile drawer behavior.
+
+**Retention policy:**
+
+> Added retention guidance for queue events, runs, findings, deliveries, HITL proposals, checkpoints, and monthly cost rollups so the system has a path beyond demo-scale data growth.
+
+---
+
+## 2:45-3:45 — Production-Trust UI Additions
+
+Open the deployed app and show the FleetGraph drawer tabs.
+
+Say:
+
+> The other major change after Early Submission is operational trust. I added the surfaces I would want before giving this to a real team: Ops, Tuning, and Replay.
+
+**Findings:**
+
+> Findings remain the core risk inbox: severity, status, age, evidence, rationale, trace metadata, and human approval actions.
+
+Open Ask Ship and ask:
+
+```text
+What's at risk on this project?
+```
+
+Say:
+
+> I also connected FleetGraph to Ask Ship retrieval. New and existing `fleetgraph_finding` documents are indexed into Ask Ship's vector retrieval pipeline, so the chat surface can reuse FleetGraph's prior analysis instead of rediscovering the same risks from scratch.
+
+**Ops:**
+
+> The Ops tab shows queue depth, recent runs, detector volume, pending approval gates, average latency, token cost, and last successful sweep. This makes FleetGraph operable and debuggable, not just demoable.
+
+**Tuning:**
+
+> The Tuning tab lets workspace admins enable or disable detectors, override severity, and adjust thresholds like stale-days and churn windows. This matters because different teams have different alert tolerance.
+
+**Replay:**
+
+> The Replay tab saves a route context plus expected checks, reruns FleetGraph manually, and stores an evaluation report. That makes demos, regression checks, and LangSmith trace refreshes repeatable when Ship state changes.
+
+Also point out notification controls if visible:
+
+> Notification rules are user-configurable now: toast threshold, action-required behavior, and unread badge behavior are preferences instead of hardcoded critical/high logic.
+
+---
+
+## 3:45-4:15 — Baseline Evidence Still Stands
+
+Show `Deployment Evidence`, `Test Cases`, or the LangSmith tabs only briefly.
+
+Say:
+
+> The Early Submission evidence still stands underneath these additions: the public app is deployed at `https://ship-wf2i.onrender.com`, FleetGraph status reports proactive mode and LangSmith tracing enabled, and the timed public latency run surfaced a real finding in 15.3 seconds.
+
+If showing traces, keep it short:
+
+> The three trace paths are still available: proactive finding-only, HITL interrupt, and on-demand chat. I am only showing them briefly here because they were the focus of the Early Submission; the final delta is cost, expansion, operations, tuning, and replay.
+
+---
+
+## 4:15-4:35 — Close
+
+Return to the top of `FLEETGRAPH.md`.
+
+Say:
+
+> In short: Early Submission proved the graph works. Final Submission makes it more complete and more production-trustworthy: cost model, expanded detectors, documented design and retention, Ask Ship retrieval reuse, configurable notifications, an ops dashboard, detector tuning, and replayable evaluations.
+
+Then say:
+
+> The two root deliverables remain `PRESEARCH.md` and `FLEETGRAPH.md`; `FLEETGRAPH.md` now contains both the original MVP/Early evidence and the final-submission additions.
 
 ---
 
 ## If Something Is Slow During The Demo
 
-- If the deployed app is cold, show the Deployment Evidence table in `FLEETGRAPH.md` instead of waiting live.
-- If login has expired, show the authenticated FleetGraph status and findings evidence already in `FLEETGRAPH.md`.
+- If the deployed app is cold, show `FLEETGRAPH.md` -> `Deployment Evidence`.
+- If the Ops, Tuning, or Replay tabs are not visible in the deployed UI yet, show `FLEETGRAPH.md` -> `Operations, Tuning, And Replay Harness` and mention the committed files.
+- If Ask Ship does not cite a FleetGraph finding live, show the implementation note that `fleetgraph_finding` documents are indexed into `assistant_search_chunks`.
 - If LangSmith is slow, show the trace IDs and run IDs listed under `Observability`.
-- If the FleetGraph drawer shows no unread findings, show the delivered finding `31c7618c` and the implementation validation table.
-- If time is running tight, cut the Architecture Decisions walkthrough (Section 4) to one sentence each and recover 30 seconds.
+- If time is tight, skip the baseline LangSmith trace walkthrough. That was Early Submission evidence.
 
 ---
 
-## Deliverable Coverage
+## Final Delta Coverage
 
-| Requirement | Where to show it |
+| Final-change area | Where to show it |
 |---|---|
-| Presearch checklist | `PRESEARCH.md` |
-| Agent responsibility | `FLEETGRAPH.md` → `Agent Responsibility` |
-| Graph diagram and outline | `FLEETGRAPH.md` → `Graph Diagram` and `Graph Outline` |
-| Trigger model | `FLEETGRAPH.md` → `Trigger Model` |
-| Use cases (≥5) | `FLEETGRAPH.md` → `Use Cases` |
-| MVP test cases with trace links | `FLEETGRAPH.md` → `Test Cases`; LangSmith tabs |
-| Expansion detector verification | `FLEETGRAPH.md` → `Expanded Detector Verification Details` and `Expansion External Evidence`; `api/src/services/fleetgraph/detectors.test.ts` |
-| Architecture decisions | `FLEETGRAPH.md` → `Architecture Decisions` |
-| **Cost analysis — development spend** | `FLEETGRAPH.md` → `Performance and Cost` → `Development and Testing Costs` |
-| **Cost analysis — production projections** | `FLEETGRAPH.md` → `Performance and Cost` → `Production Cost Projections` |
-| Different execution paths | Traces `129c549c`, `fdca7b9c`, `6a0f01b2` |
-| Human-in-the-loop gate | HITL trace `fdca7b9c`; `Human-in-the-Loop Experience` section |
-| Real Ship data | All six MVP traces from real Ship rows; expansion rows have deterministic tests plus deployed Ship runs and audited public LangSmith traces |
-| Proactive detection end-to-end | Deployment Evidence; proactive trace `129c549c` |
-| Deployed and publicly accessible | `https://ship-wf2i.onrender.com` |
-| Detection latency under 5 minutes | Public timed run: 15.3 seconds |
-| Chat and notifications in UI | Deployed FleetGraph drawer; `UI Integration` section |
+| Brief project recap | `FLEETGRAPH.md` -> top, `Agent Responsibility`, `Graph Diagram` |
+| Cost analysis - development spend | `FLEETGRAPH.md` -> `Performance and Cost` -> `Development and Testing Costs` |
+| Cost analysis - production projections | `FLEETGRAPH.md` -> `Performance and Cost` -> `Production Cost Projections` |
+| Expanded detector registry | `FLEETGRAPH.md` -> detector catalog; `api/src/services/fleetgraph/detectors.ts` |
+| Overdue milestone detector | `FLEETGRAPH.md` -> expansion detector cases |
+| Workload imbalance detector | `FLEETGRAPH.md` -> expansion detector cases |
+| Scope churn detector | `FLEETGRAPH.md` -> expansion detector cases |
+| RACI drift detector | `FLEETGRAPH.md` -> expansion detector cases |
+| Visual mockups/state documentation | `FLEETGRAPH.md` -> `Design Review Completion` |
+| Long-term retention policy | `FLEETGRAPH.md` -> retention/cost rollup policy |
+| Ask Ship reuses FleetGraph findings | Ask Ship drawer; indexed `fleetgraph_finding` documents |
+| User-configurable notification rules | FleetGraph drawer notification controls; `/api/fleetgraph/preferences` |
+| FleetGraph ops dashboard | FleetGraph drawer -> `Ops`; `/api/fleetgraph/ops` |
+| Detector tuning controls | FleetGraph drawer -> `Tuning`; `/api/fleetgraph/detectors` |
+| Replayable evaluation harness | FleetGraph drawer -> `Replay`; `/api/fleetgraph/replay/scenarios` |
 
-Before recording, confirm all three LangSmith trace links open in an incognito browser and that no local credentials are visible in the recording.
+## Baseline Coverage To Mention Briefly
+
+| Early/MVP area | Where to show it if asked |
+|---|---|
+| Proactive detection end-to-end | Deployment Evidence; trace `129c549c` |
+| HITL gate | Trace `fdca7b9c`; `Human-in-the-Loop Experience` |
+| On-demand chat path | Trace `6a0f01b2` |
+| Real Ship data | `FLEETGRAPH.md` -> `Test Cases` |
+| Deployment | `https://ship-wf2i.onrender.com` |
+| Detection latency under 5 minutes | Public timed run: 15.3 seconds |
+
+Before recording, confirm the deployed app and the three optional LangSmith trace links open in an incognito browser and that no local credentials are visible in the recording.

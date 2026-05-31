@@ -666,9 +666,19 @@ Operational targets:
 - Duplicate finding rate: zero for the same workspace, target, detection type, and state window.
 - Real Ship data only for submitted traces and E2E validation.
 
-### Development and Testing Costs
+### AI Cost Analysis - Development and Testing Costs
 
 FleetGraph runtime model costs are tracked in `fleetgraph_runs`. The graph runtime made 0 Claude API calls because the Week5 FleetGraph provider is OpenAI `gpt-4o-mini`; therefore FleetGraph Claude API input, output, and total runtime cost are $0.00. Codex/IDE development assistant billing is not exposed to the repository or FleetGraph runtime telemetry, so the auditable cost report below is based on persisted FleetGraph graph invocations.
+
+**AI cost analysis rubric checklist:**
+
+| Required item | Tracked value |
+|---|---:|
+| Claude API input tokens | 0 |
+| Claude API output tokens | 0 |
+| Claude API runtime cost | $0.00 |
+| Graph-agent invocations during development/testing | 9 |
+| Total tracked FleetGraph development/test spend | $0.002651 |
 
 Tracked development/test totals on 2026-05-26:
 
@@ -704,7 +714,7 @@ These rows are retained only to verify that the drain route correctly persists r
 | 2026-05-26 | Isolated Docker Postgres `fleetgraph_runs` row | chat | `mock` / `mock-fleetgraph` | 787 | 149 | $0.000207 |
 | 2026-05-26 | Isolated Docker Postgres `fleetgraph_runs` row | chat | `mock` / `mock-fleetgraph` | 0 | 0 | $0.000000 |
 
-### Production Cost Projections
+### AI Cost Analysis - Production Cost Projections
 
 Assumptions:
 
@@ -713,13 +723,14 @@ Assumptions:
 - 3 on-demand invocations per user per day.
 - Proactive average: 5,000 input tokens and 500 output tokens.
 - On-demand average: 8,000 input tokens and 800 output tokens.
+- Blended average across the assumed 15 daily invocations per user: 5,600 input tokens and 560 output tokens per invocation.
 - Price: $0.15 / 1M input tokens and $0.60 / 1M output tokens.
 
 | Scale | Monthly estimate | Assumptions |
 |---|---:|---|
-| 100 users | $52.92 | 1 project/user, 12 proactive runs/project/day, 3 on-demand runs/user/day, 5k/500 proactive tokens, 8k/800 on-demand tokens |
-| 1,000 users | $529.20 | Same starter assumptions |
-| 10,000 users | $5,292.00 | Same starter assumptions |
+| 100 users | $52.92/month | 1 project/user, 12 proactive runs/project/day, 3 on-demand runs/user/day, 5k/500 proactive tokens, 8k/800 on-demand tokens; blended average 5.6k/560 tokens per invocation |
+| 1,000 users | $529.20/month | 1 project/user, 12 proactive runs/project/day, 3 on-demand runs/user/day, 5k/500 proactive tokens, 8k/800 on-demand tokens; blended average 5.6k/560 tokens per invocation |
+| 10,000 users | $5,292.00/month | 1 project/user, 12 proactive runs/project/day, 3 on-demand runs/user/day, 5k/500 proactive tokens, 8k/800 on-demand tokens; blended average 5.6k/560 tokens per invocation |
 
 ## Deployment Evidence
 
